@@ -1058,10 +1058,23 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     const result = await sdk.client.global.upgrade({ target: version })
 
     if (result.error || !result.data?.success) {
+      const message = (() => {
+        if (result.data && !result.data.success) return result.data.error
+        const error: unknown = result.error
+        if (error && typeof error === "object" && "error" in error && typeof error.error === "string") {
+          return error.error
+        }
+        if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+          return error.message
+        }
+        if (typeof error === "string") return error
+        return "Update failed"
+      })()
+
       toast.show({
         variant: "error",
         title: "Update Failed",
-        message: result.data && !result.data.success ? result.data.error : "Update failed",
+        message,
         duration: 10000,
       })
       return
