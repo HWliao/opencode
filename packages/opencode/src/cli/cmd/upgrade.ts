@@ -2,7 +2,7 @@ import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationLocalUpgradeMessage, InstallationVersion } from "@opencode-ai/core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -25,6 +25,11 @@ export const UpgradeCommand = {
     UI.println(UI.logo("  "))
     UI.empty()
     prompts.intro("Upgrade")
+    if (Installation.isLocal()) {
+      prompts.log.warn(InstallationLocalUpgradeMessage)
+      prompts.outro("Done")
+      return
+    }
     const detectedMethod = await Installation.method()
     const method = (args.method as Installation.Method) ?? detectedMethod
     if (method === "unknown") {
