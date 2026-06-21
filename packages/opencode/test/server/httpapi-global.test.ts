@@ -1,5 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node"
-import { describe, expect } from "bun:test"
+import { InstallationLocalUpgradeMessage } from "@opencode-ai/core/installation/version"
+import { afterEach, describe, expect, mock, spyOn } from "bun:test"
 import { Context, Effect, Layer, Option } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -16,6 +17,10 @@ import { globalHandlers } from "../../src/server/routes/instance/httpapi/handler
 import { authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { schemaErrorLayer } from "../../src/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "../lib/effect"
+
+afterEach(() => {
+  mock.restore()
+})
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
@@ -45,10 +50,23 @@ const it = testEffect(apiLayer)
 describe("global HttpApi", () => {
   it.live("upgrades to latest when the request body is omitted", () =>
     Effect.gen(function* () {
+      spyOn(Installation, "isLocal").mockReturnValue(false)
+
       const response = yield* HttpClient.post(GlobalPaths.upgrade)
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ success: true, version: "9.9.9" })
+    }),
+  )
+
+  it.live("refuses managed upgrades for local builds", () =>
+    Effect.gen(function* () {
+      spyOn(Installation, "isLocal").mockReturnValue(true)
+
+      const response = yield* HttpClient.post(GlobalPaths.upgrade)
+
+      expect(response.status).toBe(400)
+      expect(yield* response.json).toEqual({ success: false, error: InstallationLocalUpgradeMessage })
     }),
   )
 

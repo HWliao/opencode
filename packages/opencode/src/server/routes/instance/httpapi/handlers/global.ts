@@ -4,7 +4,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationLocalUpgradeMessage, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -95,6 +95,12 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const upgrade = Effect.fn("GlobalHttpApi.upgrade")(function* (ctx: { payload: typeof GlobalUpgradeInput.Type }) {
+      if (Installation.isLocal()) {
+        return {
+          status: 400,
+          body: { success: false as const, error: InstallationLocalUpgradeMessage },
+        }
+      }
       const method = yield* installation.method()
       if (method === "unknown") {
         return {
