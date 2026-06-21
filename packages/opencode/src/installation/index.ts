@@ -11,7 +11,7 @@ import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationChannel, InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
 import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 
@@ -49,7 +49,7 @@ export function isPreview() {
 }
 
 export function isLocal() {
-  return InstallationChannel === "local"
+  return InstallationLocal
 }
 
 export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
