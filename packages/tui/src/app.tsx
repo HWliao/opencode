@@ -988,7 +988,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   event.on("tui.toast.show", (evt, { workspace }) => {
-    if (workspace !== project.workspace.current()) return
+    if (workspace && workspace !== project.workspace.current()) return
     toast.show({
       title: evt.properties.title,
       message: evt.properties.message,
