@@ -419,6 +419,9 @@ const layer = Layer.effect(
           }
 
           case "provider-error":
+            if (value.classification === "context-overflow") {
+              throw new SessionV1.ContextOverflowError({ message: value.message })
+            }
             throw new Error(value.message)
 
           case "step-start":
@@ -440,6 +443,16 @@ const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
+            if (value.reason === "unknown") {
+              yield* Effect.logWarning("LLM step finished with unknown reason", {
+                "session.id": ctx.sessionID,
+                messageID: ctx.assistantMessage.id,
+                providerID: ctx.model.providerID,
+                modelID: ctx.model.id,
+                hasUsage: value.usage !== undefined,
+                tokens: usage.tokens,
+              })
+            }
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens

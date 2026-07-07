@@ -612,6 +612,8 @@ export function fromError(
           cause: e,
         },
       ).toObject()
+    case ContextOverflowError.isInstance(e):
+      return e
     case OutputLengthError.isInstance(e):
       return e
     case LoadAPIKeyError.isInstance(e):
@@ -673,7 +675,7 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case APICallError.isInstance(e):
+    case APICallError.isInstance(e): {
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,
         error: e,
@@ -699,6 +701,7 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    }
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:

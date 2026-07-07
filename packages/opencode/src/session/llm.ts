@@ -291,8 +291,10 @@ const live: Layer.Layer<
               }),
             )
           },
-          // Copilot returns the authoritative billed amount only in provider-specific response fields.
-          includeRawChunks: input.model.providerID.includes("github-copilot"),
+          // Copilot returns authoritative billing in provider-specific raw fields.
+          // OpenAI raw chunks preserve terminal incomplete/error details when the
+          // AI SDK normalizes a provider stop into finishReason: "unknown".
+          includeRawChunks: input.model.providerID.includes("github-copilot") || input.model.providerID === "openai",
           async experimental_repairToolCall(failed) {
             const lower = failed.toolCall.toolName.toLowerCase()
             if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
@@ -373,7 +375,16 @@ const live: Layer.Layer<
             return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
             ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
+              Stream.mapEffect((event) =>
+                LLMAISDK.toLLMEvents(state, event, {
+                  sessionID: input.sessionID,
+                  providerID: input.model.providerID,
+                  modelID: input.model.id,
+                  small: input.small ?? false,
+                  agent: input.agent.name,
+                  mode: input.agent.mode,
+                }),
+              ),
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
           }),

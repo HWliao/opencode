@@ -333,6 +333,28 @@ describe("session.llm.ai-sdk adapter", () => {
     ).toEqual([])
   })
 
+  test("emits classified provider errors from raw OpenAI context overflow chunks", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({
+        type: "raw",
+        rawValue: {
+          type: "error",
+          code: "context_too_large",
+          message: "Your input exceeds the context window of this model. Please adjust your input and try again.",
+          sequence_number: 1,
+        },
+      }),
+    ])
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: "provider-error",
+      classification: "context-overflow",
+      message:
+        "context_too_large: Your input exceeds the context window of this model. Please adjust your input and try again.",
+    })
+  })
+
   test("preserves tool-error cause", async () => {
     const error = new PermissionV1.RejectedError()
     const events = await Effect.runPromise(

@@ -23,3 +23,8 @@ The session is aborted automatically. The reason is currently unknown.
 ## Investigation
 
 Not started. This issue is only recorded for follow-up investigation.
+
+## Example Session
+
+session aborted example
+sessionID: ses_0c43493cbffe1K13wnzxYklKSK

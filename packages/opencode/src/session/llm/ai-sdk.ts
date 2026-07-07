@@ -1,10 +1,30 @@
-import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
+import { FinishReason, isContextOverflow, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
 
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
+
+type EventContext = {
+  readonly sessionID: string
+  readonly providerID: string
+  readonly modelID: string
+  readonly small: boolean
+  readonly agent: string
+  readonly mode: string
+}
+
+type RawChunkSummary = {
+  readonly type?: string
+  readonly responseID?: string
+  readonly incompleteReason?: string
+  readonly errorCode?: string
+  readonly errorMessage?: string
+  readonly hasUsage?: boolean
+  readonly usageKeys?: string[]
+  readonly keys?: string[]
+}
 
 export function adapterState() {
   return {
@@ -15,6 +35,7 @@ export function adapterState() {
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
     copilotTotalNanoAiu: undefined as number | undefined,
+    lastRawChunk: undefined as RawChunkSummary | undefined,
   }
 }
 
@@ -25,6 +46,74 @@ function finishReason(value: string | undefined): FinishReason {
 function providerMetadata(value: unknown): ProviderMetadata | undefined {
   if (value == null) return undefined
   return Schema.is(ProviderMetadata)(value) ? value : undefined
+}
+
+function providerMetadataSummary(value: unknown) {
+  if (!value || typeof value !== "object") return undefined
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      item && typeof item === "object" ? Object.keys(item as Record<string, unknown>) : typeof item,
+    ]),
+  )
+}
+
+function rawFinishReason(event: AISDKEvent) {
+  if (!("rawFinishReason" in event)) return undefined
+  return event.rawFinishReason === undefined || event.rawFinishReason === null ? undefined : String(event.rawFinishReason)
+}
+
+function stringField(value: unknown) {
+  return typeof value === "string" ? value.slice(0, 500) : undefined
+}
+
+function rawChunkSummary(value: unknown): RawChunkSummary | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const raw = value as Record<string, unknown>
+  const response = raw.response && typeof raw.response === "object" ? (raw.response as Record<string, unknown>) : undefined
+  const incomplete =
+    response?.incomplete_details && typeof response.incomplete_details === "object"
+      ? (response.incomplete_details as Record<string, unknown>)
+      : undefined
+  const error = response?.error && typeof response.error === "object" ? (response.error as Record<string, unknown>) : undefined
+  const usage = response?.usage && typeof response.usage === "object" ? (response.usage as Record<string, unknown>) : undefined
+  const type = stringField(raw.type)
+  const summary = {
+    type,
+    responseID: stringField(response?.id),
+    incompleteReason: stringField(incomplete?.reason),
+    errorCode: stringField(raw.code) ?? stringField(error?.code),
+    errorMessage: stringField(raw.message) ?? stringField(error?.message),
+    hasUsage: response ? response.usage !== undefined && response.usage !== null : undefined,
+    usageKeys: usage ? Object.keys(usage) : undefined,
+    keys: Object.keys(raw),
+  }
+  if (
+    summary.incompleteReason === undefined &&
+    summary.errorCode === undefined &&
+    summary.errorMessage === undefined &&
+    !(type?.startsWith("response."))
+  ) {
+    return undefined
+  }
+  return summary
+}
+
+function rawProviderError(summary: RawChunkSummary | undefined) {
+  if (!summary || (summary.type !== "error" && summary.type !== "response.failed")) return undefined
+  const message =
+    summary.errorCode && summary.errorMessage
+      ? `${summary.errorCode}: ${summary.errorMessage}`
+      : (summary.errorMessage ?? summary.errorCode ?? "Provider stream error")
+  return LLMEvent.providerError({
+    message,
+    classification:
+      summary.errorCode === "context_too_large" ||
+      summary.errorCode === "context_length_exceeded" ||
+      isContextOverflow(message)
+        ? "context-overflow"
+        : undefined,
+  })
 }
 
 // Temporary AI SDK bridge: Copilot billing survives only in raw provider chunks here.
@@ -76,6 +165,7 @@ function currentReasoningID(state: ReturnType<typeof adapterState>, id: string |
 export function toLLMEvents(
   state: ReturnType<typeof adapterState>,
   event: AISDKEvent,
+  ctx?: EventContext,
 ): Effect.Effect<ReadonlyArray<LLMEvent>, unknown> {
   switch (event.type) {
     case "start":
@@ -85,7 +175,7 @@ export function toLLMEvents(
       return Effect.succeed([LLMEvent.stepStart({ index: state.step })])
 
     case "finish-step":
-      return Effect.sync(() => {
+      return Effect.gen(function* () {
         const original = providerMetadata(event.providerMetadata)
         const metadata =
           state.copilotTotalNanoAiu === undefined
@@ -98,11 +188,23 @@ export function toLLMEvents(
                 },
               }
         state.copilotTotalNanoAiu = undefined
+        const reason = finishReason(event.finishReason)
+        const stepUsage = usage(event.usage)
+        if (reason === "unknown" && ctx) {
+          yield* Effect.logWarning("AI SDK finish-step had unknown finish reason", {
+            ...ctx,
+            finishReason: event.finishReason ?? "<undefined>",
+            rawFinishReason: rawFinishReason(event) ?? "<undefined>",
+            usage: stepUsage,
+            providerMetadata: providerMetadataSummary(event.providerMetadata),
+            lastRawChunk: state.lastRawChunk,
+          })
+        }
         return [
           LLMEvent.stepFinish({
             index: state.step++,
-            reason: finishReason(event.finishReason),
-            usage: usage(event.usage),
+            reason,
+            usage: stepUsage,
             providerMetadata: metadata,
           }),
         ]
@@ -274,7 +376,10 @@ export function toLLMEvents(
     case "raw":
       return Effect.sync(() => {
         state.copilotTotalNanoAiu = copilotTotalNanoAiu(event.rawValue) ?? state.copilotTotalNanoAiu
-        return []
+        const summary = rawChunkSummary(event.rawValue)
+        state.lastRawChunk = summary ?? state.lastRawChunk
+        const error = rawProviderError(summary)
+        return error ? [error] : []
       })
 
     default: {

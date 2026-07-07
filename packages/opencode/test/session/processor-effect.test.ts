@@ -226,6 +226,26 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const contextOverflowProviderErrorLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.providerError({
+          message:
+            "context_too_large: Your input exceeds the context window of this model. Please adjust your input and try again.",
+          classification: "context-overflow",
+        }),
+      ),
+  }),
+)
+const contextOverflowProviderErrorEnv = LayerNode.compile(root, [
+  ...replacements,
+  [LLM.node, contextOverflowProviderErrorLLM],
+])
+const itContextOverflowProviderError = testEffect(contextOverflowProviderErrorEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -698,6 +718,42 @@ it.live("session.processor effect tests compact on structured context overflow",
         expect(handle.message.error).toBeUndefined()
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+itContextOverflowProviderError.live("session.processor effect tests compact on classified provider context overflow", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "compact provider event")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "compact provider event" }],
+          tools: {},
+        })
+
+        expect(value).toBe("compact")
+        expect(handle.message.error).toBeUndefined()
+      }),
+    { config: cfg },
   ),
 )
 
