@@ -188,6 +188,64 @@ warp 的 `copyChanges` 不是文件级目录同步，而是 git patch 迁移。
 
 如果 5 路并发任务依赖 ignored 文件，需要在每个 worktree 中单独准备，例如从 `.env.example` 生成 `.env`，重新安装依赖，或运行项目自己的初始化脚本。
 
+## 复用旧 Workspace 的目录状态
+
+workspace 目录不会在 session 移出后自动跟随 home 更新。
+
+典型场景：
+
+1. `session A` 移入 `workspace A`。
+2. 在 `workspace A` 中完成开发。
+3. `session A` 通过 `/warp` 选择 `None` 移出 `workspace A`。
+4. 选择复制文件改动，把 `workspace A` 的 patch apply 到 home。
+5. 过一段时间后，home 目录已有大量新变化。
+6. `session B` 再次移入同一个 `workspace A`。
+
+此时 `workspace A` 的文件状态不是 home 的最新状态，而是：
+
+```text
+workspace A = 当初创建 worktree 时的 detached HEAD
+            + session A 开发留下的 workspace 本地改动
+            + 后续在 workspace A 中手动产生的变化
+```
+
+关键边界：
+
+- `copyChanges=yes` 只把源 workspace 的 diff apply 到目标目录。
+- 它不会清理源 workspace 的本地改动。
+- 它不会把源 workspace reset 到干净状态。
+- home 后续发生的大量变化，不会自动同步回旧 workspace。
+- 后续 session 绑定到旧 workspace 后，看到的是旧 workspace 目录当前实际状态。
+
+因此不建议复用已经完成并合回 home 的旧 workspace。完成一条 lane 后，先确认改动已经保留、合并或迁移，再删除对应 workspace。后续新任务应创建新的 `Worktree` workspace。
+
+如果必须复用旧 workspace，应先复制路径并在该目录中手动检查 `git status`，确认它是否需要 reset、clean、更新到目标基线，或处理与 home 的差异。
+
+## 模型上下文中的 Workspace 感知
+
+绑定 workspace 后，模型能看到当前工作目录已经变化，但默认不一定知道 OpenCode workspace 的 ID、名称或类型。
+
+当前 system environment 会注入：
+
+```text
+Working directory: <ctx.directory>
+Workspace root folder: <ctx.worktree>
+Is directory a git repo: yes/no
+```
+
+如果 session 绑定在 worktree workspace 中，`Working directory` 和 `Workspace root folder` 会指向该 worktree workspace 的目录。assistant message 记录中也会保存 `path: { cwd, root }`。
+
+通过 `/warp` 移入或移出 workspace 时，TUI 还会发送 synthetic reminder，提醒当前工作目录已经变成某个目录，并说明这仍是同一个项目但位于可能不同的位置。
+
+默认不会显式告诉模型这些 OpenCode workspace 元数据：
+
+- workspace ID，例如 `wrk_xxx`
+- workspace name
+- workspace type，例如 `worktree`
+- 当前 lane 编号或用途
+
+因此，如果需要让模型稳定知道“这是 workspace A / lane 1 / 用于某个任务”，应在 session 首条 prompt 或 warp 之后显式说明。
+
 ## 管理和删除 Workspaces
 
 通过 `/workspaces` 或命令面板中的 `Manage workspaces` 打开管理弹窗。
@@ -270,6 +328,39 @@ TUI 里没有名为 `concurrency = 5` 的单一配置项。单项目 5 并发的
 | 4 | 新 `Worktree` | 在 session 列表 pin | `ctrl+x 4` |
 | 5 | 新 `Worktree` | 在 session 列表 pin | `ctrl+x 5` |
 
+## Workspace 使用最佳实践
+
+推荐按“短生命周期、单任务、独立 worktree”的方式使用 TUI workspaces。
+
+创建与分配：
+
+- 一条独立任务使用一个独立 session。
+- 可能改文件的任务使用一个独立 `Worktree` workspace。
+- 不要让多个并发编辑任务共享同一个 workspace，除非明确需要它们协作修改同一份工作树。
+- 创建 session 前确认 prompt 下方是否显示目标 `Workspace <name>`。
+- 对 5 路并发，创建 5 个根 sessions，并 pin 到 `ctrl+x 1` 到 `ctrl+x 5`。
+
+任务执行：
+
+- 在首条 prompt 中说明 lane 目标、workspace 用途和注意事项。
+- 如果任务依赖 `.env`、本地密钥、缓存或生成文件，在每个 worktree 中单独准备。
+- 不要依赖 `copyChanges` 同步 `.gitignore` 忽略文件。
+- 如果需要跨 workspace 移动改动，优先确认源 workspace 的 `git status`，再选择是否复制改动。
+
+移出与合回：
+
+- 从 workspace 回到 home 时，如果需要保留 workspace 改动，选择复制文件改动。
+- 复制改动是 patch apply，不是完整目录同步。
+- apply 失败时，不要强行删除 workspace；先在源 workspace 保留现场并手动处理冲突。
+- patch 成功 apply 到 home 后，源 workspace 仍保留原本本地改动，需要后续清理或删除。
+
+回收与维护：
+
+- 一条 lane 完成后，确认改动已经合回、提交、stash 或不再需要，再删除 workspace。
+- 不推荐长期复用旧 workspace 承接新任务。
+- 删除 workspace 前确认没有仍需保留的 session 或未迁移文件。
+- 如果 workspace 状态为 error 或目录不存在，优先用恢复流程把 session 移到新的 workspace，不要在未知状态下继续提交任务。
+
 ## 安全注意事项
 
 - 删除 workspace 会删除它绑定的 sessions，也会删除 adapter 管理的目标。
@@ -290,3 +381,5 @@ TUI 里没有名为 `concurrency = 5` 的单一配置项。单项目 5 并发的
 - Workspace handlers：`packages/opencode/src/server/routes/instance/httpapi/handlers/workspace.ts`
 - Workspace service：`packages/opencode/src/control-plane/workspace.ts`
 - 内置 worktree adapter：`packages/opencode/src/control-plane/adapters/worktree.ts`
+- System environment 注入：`packages/opencode/src/session/system.ts`
+- Session message path 记录：`packages/opencode/src/session/prompt.ts`
