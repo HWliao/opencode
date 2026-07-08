@@ -380,9 +380,7 @@ const layer = Layer.effect(
       yield* repositoryOperation("create", repository, ["init"])
       yield* Effect.forEach(
         [
-          ["core.autocrlf", "false"],
           ["core.longpaths", "true"],
-          ["core.symlinks", "true"],
           ["core.fsmonitor", "false"],
           ["feature.manyFiles", "true"],
           ["index.version", "4"],

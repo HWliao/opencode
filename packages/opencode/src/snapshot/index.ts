@@ -22,8 +22,7 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
-const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
-const cfg = ["-c", "core.autocrlf=false", ...core]
+const cfg = ["-c", "core.longpaths=true"]
 const quote = [...cfg, "-c", "core.quotepath=false"]
 interface GitResult {
   readonly code: ChildProcessSpawner.ExitCode
@@ -325,9 +324,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 yield* git(["init"], {
                   env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
                 })
-                yield* git(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
-                yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
                 // Tuning for very large worktrees so the first add stays bounded.
                 yield* git(["--git-dir", state.gitdir, "config", "feature.manyFiles", "true"])
@@ -383,9 +380,9 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           return yield* locked(
             Effect.gen(function* () {
               yield* Effect.logInfo("restore", { commit: snapshot })
-              const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
+              const result = yield* git([...cfg, ...args(["read-tree", snapshot])], { cwd: state.worktree })
               if (result.code === 0) {
-                const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
+                const checkout = yield* git([...cfg, ...args(["checkout-index", "-a", "-f"])], {
                   cwd: state.worktree,
                 })
                 if (checkout.code === 0) return
@@ -424,11 +421,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
               const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                 yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
-                const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
+                const result = yield* git([...cfg, ...args(["checkout", op.hash, "--", op.file])], {
                   cwd: state.worktree,
                 })
                 if (result.code === 0) return
-                const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
+                const tree = yield* git([...cfg, ...args(["ls-tree", op.hash, "--", op.rel])], {
                   cwd: state.worktree,
                 })
                 if (tree.code === 0 && tree.text.trim()) {
@@ -464,7 +461,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 }
 
                 const tree = yield* git(
-                  [...core, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
+                  [...cfg, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
                   {
                     cwd: state.worktree,
                   },
@@ -493,7 +490,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 if (list.length) {
                   yield* Effect.logInfo("reverting", { hash: first.hash, files: list.length })
                   const result = yield* git(
-                    [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
+                    [...cfg, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
                     {
                       cwd: state.worktree,
                     },
