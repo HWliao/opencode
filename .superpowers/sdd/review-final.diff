@@ -1,0 +1,2299 @@
+# Final review package: TUI project management
+
+## Git status
+ M packages/client/src/generated-effect/.httpapi-codegen.json
+ M packages/client/src/generated-effect/client-error.ts
+ M packages/client/src/generated-effect/client.ts
+ M packages/client/src/generated-effect/index.ts
+ M packages/client/src/generated/.httpapi-codegen.json
+ M packages/client/src/generated/client-error.ts
+ M packages/client/src/generated/client.ts
+ M packages/client/src/generated/index.ts
+ M packages/client/src/generated/types.ts
+ M packages/opencode/src/server/routes/instance/httpapi/api.ts
+ M packages/opencode/src/server/routes/instance/httpapi/server.ts
+ M packages/sdk/js/src/gen/client.gen.ts
+ M packages/sdk/js/src/gen/client/client.gen.ts
+ M packages/sdk/js/src/gen/client/index.ts
+ M packages/sdk/js/src/gen/client/types.gen.ts
+ M packages/sdk/js/src/gen/client/utils.gen.ts
+ M packages/sdk/js/src/gen/core/auth.gen.ts
+ M packages/sdk/js/src/gen/core/bodySerializer.gen.ts
+ M packages/sdk/js/src/gen/core/params.gen.ts
+ M packages/sdk/js/src/gen/core/pathSerializer.gen.ts
+ M packages/sdk/js/src/gen/core/queryKeySerializer.gen.ts
+ M packages/sdk/js/src/gen/core/serverSentEvents.gen.ts
+ M packages/sdk/js/src/gen/core/types.gen.ts
+ M packages/sdk/js/src/gen/core/utils.gen.ts
+ M packages/sdk/js/src/gen/sdk.gen.ts
+ M packages/sdk/js/src/gen/types.gen.ts
+ M packages/sdk/js/src/v2/client.ts
+ M packages/sdk/js/src/v2/data.ts
+ M packages/sdk/js/src/v2/gen/client.gen.ts
+ M packages/sdk/js/src/v2/gen/client/client.gen.ts
+ M packages/sdk/js/src/v2/gen/client/index.ts
+ M packages/sdk/js/src/v2/gen/client/types.gen.ts
+ M packages/sdk/js/src/v2/gen/client/utils.gen.ts
+ M packages/sdk/js/src/v2/gen/core/auth.gen.ts
+ M packages/sdk/js/src/v2/gen/core/bodySerializer.gen.ts
+ M packages/sdk/js/src/v2/gen/core/params.gen.ts
+ M packages/sdk/js/src/v2/gen/core/pathSerializer.gen.ts
+ M packages/sdk/js/src/v2/gen/core/queryKeySerializer.gen.ts
+ M packages/sdk/js/src/v2/gen/core/serverSentEvents.gen.ts
+ M packages/sdk/js/src/v2/gen/core/types.gen.ts
+ M packages/sdk/js/src/v2/gen/core/utils.gen.ts
+ M packages/sdk/js/src/v2/gen/sdk.gen.ts
+ M packages/sdk/js/src/v2/gen/types.gen.ts
+ M packages/sdk/js/src/v2/index.ts
+ M packages/sdk/js/src/v2/server.ts
+ M packages/tui/src/app.tsx
+ M packages/tui/src/config/keybind.ts
+ M packages/tui/src/context/project.tsx
+ M packages/tui/src/context/sdk.tsx
+ M packages/tui/src/ui/dialog-select.tsx
+ M packages/tui/test/fixture/tui-sdk.ts
+?? docs/superpowers/plans/2026-07-08-tui-project-management/
+?? docs/superpowers/specs/2026-07-08-tui-project-management-design.md
+?? packages/opencode/src/server/routes/instance/httpapi/groups/directory.ts
+?? packages/opencode/src/server/routes/instance/httpapi/handlers/directory.ts
+?? packages/opencode/test/server/httpapi-directory.test.ts
+?? packages/tui/src/component/dialog-project-add.tsx
+?? packages/tui/src/component/dialog-project-list.tsx
+?? packages/tui/src/context/project-switch.tsx
+?? packages/tui/test/component/dialog-project-add.test.ts
+?? packages/tui/test/component/dialog-project-list.test.ts
+?? packages/tui/test/context/project-switch.test.tsx
+
+## Tracked diff
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/api.ts b/packages/opencode/src/server/routes/instance/httpapi/api.ts
+index f5076ad08..68ceda175 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/api.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/api.ts
+@@ -10,6 +10,7 @@ import { Question } from "@/question"
+ import { ConfigApi } from "./groups/config"
+ import { ControlApi } from "./groups/control"
+ import { ControlPlaneApi } from "./groups/control-plane"
++import { DirectoryApi } from "./groups/directory"
+ import { EventApi } from "./groups/event"
+ import { ExperimentalApi } from "./groups/experimental"
+ import { FileApi } from "./groups/file"
+@@ -60,6 +61,7 @@ export const RootHttpApi = HttpApi.make("opencode-root")
+ 
+ export const InstanceHttpApi = HttpApi.make("opencode-instance")
+   .addHttpApi(ConfigApi)
++  .addHttpApi(DirectoryApi)
+   .addHttpApi(ExperimentalApi)
+   .addHttpApi(FileApi)
+   .addHttpApi(InstanceApi)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/server.ts b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+index fb9d2db65..ae2d86ed4 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/server.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+@@ -85,6 +85,7 @@ import { eventHandlers } from "./handlers/event"
+ import { configHandlers } from "./handlers/config"
+ import { controlHandlers } from "./handlers/control"
+ import { controlPlaneHandlers } from "./handlers/control-plane"
++import { directoryHandlers } from "./handlers/directory"
+ import { experimentalHandlers } from "./handlers/experimental"
+ import { fileHandlers } from "./handlers/file"
+ import { globalHandlers } from "./handlers/global"
+@@ -154,6 +155,7 @@ const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
+ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
+   Layer.provide([
+     configHandlers,
++    directoryHandlers,
+     experimentalHandlers,
+     fileHandlers,
+     instanceHandlers,
+diff --git a/packages/sdk/js/src/v2/gen/sdk.gen.ts b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+index 049627675..4d4fd8a8a 100644
+--- a/packages/sdk/js/src/v2/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+@@ -24,6 +24,8 @@ import type {
+   ConfigProvidersResponses,
+   ConfigUpdateErrors,
+   ConfigUpdateResponses,
++  DirectoryListErrors,
++  DirectoryListResponses,
+   EventSubscribeResponses,
+   EventTuiCommandExecute,
+   EventTuiPromptAppend,
+@@ -1513,6 +1515,27 @@ export class Config2 extends HeyApiClient {
+   }
+ }
+ 
++export class Directory extends HeyApiClient {
++  /**
++   * List directories
++   *
++   * List direct child directories for an absolute server-side directory path without loading an OpenCode instance.
++   */
++  public list<ThrowOnError extends boolean = false>(
++    parameters: {
++      path: string
++    },
++    options?: Options<never, ThrowOnError>,
++  ) {
++    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "path" }] }])
++    return (options?.client ?? this.client).get<DirectoryListResponses, DirectoryListErrors, ThrowOnError>({
++      url: "/directory",
++      ...options,
++      ...params,
++    })
++  }
++}
++
+ export class Tool extends HeyApiClient {
+   /**
+    * List tools
+@@ -7116,6 +7139,11 @@ export class OpencodeClient extends HeyApiClient {
+     return (this._config ??= new Config2({ client: this.client }))
+   }
+ 
++  private _directory?: Directory
++  get directory(): Directory {
++    return (this._directory ??= new Directory({ client: this.client }))
++  }
++
+   private _tool?: Tool
+   get tool(): Tool {
+     return (this._tool ??= new Tool({ client: this.client }))
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index dc6aad95d..218de00d0 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -2121,6 +2121,11 @@ export type Provider = {
+   }
+ }
+ 
++export type DirectoryEntry = {
++  name: string
++  absolute: string
++}
++
+ export type ExperimentalCapabilities = {
+   backgroundSubagents: boolean
+ }
+@@ -7489,6 +7494,33 @@ export type ConfigProvidersResponses = {
+ 
+ export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+ 
++export type DirectoryListData = {
++  body?: never
++  path?: never
++  query: {
++    path: string
++  }
++  url: "/directory"
++}
++
++export type DirectoryListErrors = {
++  /**
++   * BadRequest | InvalidRequestError
++   */
++  400: EffectHttpApiErrorBadRequest | InvalidRequestError
++}
++
++export type DirectoryListError = DirectoryListErrors[keyof DirectoryListErrors]
++
++export type DirectoryListResponses = {
++  /**
++   * Directory entries
++   */
++  200: Array<DirectoryEntry>
++}
++
++export type DirectoryListResponse = DirectoryListResponses[keyof DirectoryListResponses]
++
+ export type ExperimentalCapabilitiesGetData = {
+   body?: never
+   path?: never
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index d36d58c42..bcfb2c325 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -49,6 +49,8 @@ import { DialogHelp } from "./ui/dialog-help"
+ import { DialogAgent } from "./component/dialog-agent"
+ import { DialogSessionList } from "./component/dialog-session-list"
+ import { DialogWorkspaceList } from "./component/dialog-workspace-list"
++import { DialogProjectAdd } from "./component/dialog-project-add"
++import { DialogProjectList } from "./component/dialog-project-list"
+ import { DialogConsoleOrg } from "./component/dialog-console-org"
+ import { ThemeProvider, useTheme } from "./context/theme"
+ import { Home } from "./routes/home"
+@@ -126,6 +128,7 @@ const appBindingCommands = [
+   "help.show",
+   "docs.open",
+   "diff.open",
++  "project.list",
+   "workspace.list",
+   "app.debug",
+   "app.console",
+@@ -592,6 +595,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
+           dialog.clear()
+         },
+       },
++      {
++        name: "project.list",
++        title: "Switch project",
++        category: "Project",
++        slashName: "projects",
++        run: () => {
++          const openList = () => dialog.replace(() => <DialogProjectList onOpenProject={openAdd} />)
++          const openAdd = () => dialog.replace(() => <DialogProjectAdd onBack={openList} />)
++          openList()
++        },
++      },
+       {
+         name: "workspace.copy_path",
+         title: "Copy worktree path",
+diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybind.ts
+index 5dd7e4b5a..4c296b839 100644
+--- a/packages/tui/src/config/keybind.ts
++++ b/packages/tui/src/config/keybind.ts
+@@ -157,6 +157,7 @@ export const Definitions = {
+   prompt_stash_pop: keybind("none", "Pop stashed prompt"),
+   prompt_stash_list: keybind("none", "List stashed prompts"),
+   workspace_set: keybind("none", "Set workspace"),
++  project_list: keybind("none", "Switch project"),
+ 
+   input_clear: keybind("ctrl+c", "Clear input field"),
+   input_paste: keybind({ key: "ctrl+v", preventDefault: false }, "Paste from clipboard"),
+@@ -211,6 +212,7 @@ export const Definitions = {
+   "dialog.move_session.new": keybind("ctrl+m", "New project copy"),
+   "dialog.move_session.delete": keybind("ctrl+d", "Delete project copy"),
+   "dialog.move_session.refresh": keybind("ctrl+r", "Refresh project copies"),
++  "dialog.project.open": keybind("ctrl+o", "Open project directory"),
+   "prompt.autocomplete.prev": keybind("up,ctrl+p", "Move to previous autocomplete item"),
+   "prompt.autocomplete.next": keybind("down,ctrl+n", "Move to next autocomplete item"),
+   "prompt.autocomplete.hide": keybind("escape", "Hide autocomplete"),
+@@ -361,6 +363,7 @@ export const CommandMap = {
+   prompt_stash_pop: "prompt.stash.pop",
+   prompt_stash_list: "prompt.stash.list",
+   workspace_set: "workspace.set",
++  project_list: "project.list",
+   input_clear: "prompt.clear",
+   input_paste: "prompt.paste",
+   input_submit: "input.submit",
+diff --git a/packages/tui/src/context/project.tsx b/packages/tui/src/context/project.tsx
+index d73a17e7e..744645958 100644
+--- a/packages/tui/src/context/project.tsx
++++ b/packages/tui/src/context/project.tsx
+@@ -11,13 +11,14 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
+   init: () => {
+     const sdk = useSDK()
+ 
+-    const defaultPath = {
+-      home: "",
+-      state: "",
+-      config: "",
+-      worktree: "",
+-      directory: sdk.directory ?? "",
+-    } satisfies Path
++    const defaultPath = () =>
++      ({
++        home: "",
++        state: "",
++        config: "",
++        worktree: "",
++        directory: sdk.directory ?? "",
++      }) satisfies Path
+ 
+     const [store, setStore] = createStore({
+       project: {
+@@ -26,7 +27,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
+         mainDir: undefined as string | undefined,
+       },
+       instance: {
+-        path: defaultPath,
++        path: defaultPath(),
+       },
+       workspace: {
+         current: undefined as string | undefined,
+@@ -45,7 +46,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
+         ? await sdk.client.project.directories({ projectID: project.data.id, workspace })
+         : undefined
+       batch(() => {
+-        setStore("instance", "path", reconcile(instancePath.data || defaultPath))
++        setStore("instance", "path", reconcile(instancePath.data || defaultPath()))
+         setStore("project", "id", project.data?.id)
+         setStore("project", "worktree", project.data?.worktree)
+         setStore("project", "mainDir", directories?.data?.findLast((item) => item.strategy === undefined)?.directory)
+diff --git a/packages/tui/src/context/sdk.tsx b/packages/tui/src/context/sdk.tsx
+index 93180c6e2..9fd0048ef 100644
+--- a/packages/tui/src/context/sdk.tsx
++++ b/packages/tui/src/context/sdk.tsx
+@@ -2,7 +2,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+ import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+ import { Flag } from "@opencode-ai/core/flag/flag"
+ import { createSimpleContext } from "./helper"
+-import { batch, onCleanup, onMount } from "solid-js"
++import { batch, createSignal, onCleanup, onMount } from "solid-js"
+ 
+ export type EventSource = {
+   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
+@@ -20,11 +20,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+     const abort = new AbortController()
+     let sse: AbortController | undefined
+ 
+-    function createSDK() {
++    const [directory, setDirectorySignal] = createSignal(props.directory)
++
++    function createSDK(nextDirectory = directory()) {
+       return createOpencodeClient({
+         baseUrl: props.url,
+         signal: abort.signal,
+-        directory: props.directory,
++        directory: nextDirectory,
+         fetch: props.fetch,
+         headers: props.headers,
+       })
+@@ -32,6 +34,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+ 
+     let sdk = createSDK()
+ 
++    function setDirectory(next: string) {
++      if (directory() === next) return
++      setDirectorySignal(next)
++      sdk = createSDK(next)
++      if (!props.events) startSSE()
++    }
++
+     const handlers = new Set<(event: GlobalEvent) => void>()
+     const emitter = {
+       emit(_type: "event", event: GlobalEvent) {
+@@ -142,7 +151,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+       get client() {
+         return sdk
+       },
+-      directory: props.directory,
++      get directory() {
++        return directory()
++      },
++      setDirectory,
+       event: emitter,
+       fetch: props.fetch ?? fetch,
+       url: props.url,
+diff --git a/packages/tui/src/ui/dialog-select.tsx b/packages/tui/src/ui/dialog-select.tsx
+index dab9103d2..33586ac54 100644
+--- a/packages/tui/src/ui/dialog-select.tsx
++++ b/packages/tui/src/ui/dialog-select.tsx
+@@ -57,6 +57,7 @@ export interface DialogSelectOption<T = any> {
+   title: string
+   titleView?: JSX.Element
+   value: T
++  search?: string
+   description?: string
+   details?: string[]
+   footer?: JSX.Element | string
+@@ -71,6 +72,23 @@ export interface DialogSelectOption<T = any> {
+   onSelect?: (ctx: DialogContext) => void
+ }
+ 
++export function filterDialogSelectOptions<T>(options: DialogSelectOption<T>[], query: string) {
++  const needle = query.toLowerCase()
++  const available = pipe(
++    options,
++    filter((x) => x.disabled !== true),
++  )
++  if (!needle) return available
++
++  // Prioritize title matches over category/search matches. Users typically search by the item name.
++  return fuzzysort
++    .go(needle, available, {
++      keys: ["title", "category", "search"],
++      scoreFn: (r) => r[0].score * 2 + r[1].score + r[2].score,
++    })
++    .map((x) => x.obj)
++}
++
+ export type DialogSelectRef<T> = {
+   filter: string
+   filtered: DialogSelectOption<T>[]
+@@ -153,23 +171,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
+ 
+   const filtered = createMemo(() => {
+     if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
+-    const needle = store.filter.toLowerCase()
+-    const options = pipe(
+-      props.options,
+-      filter((x) => x.disabled !== true),
+-    )
+-    if (!needle) return options
+-
+-    // prioritize title matches (weight: 2) over category matches (weight: 1).
+-    // users typically search by the item name, and not its category.
+-    const result = fuzzysort
+-      .go(needle, options, {
+-        keys: ["title", "category"],
+-        scoreFn: (r) => r[0].score * 2 + r[1].score,
+-      })
+-      .map((x) => x.obj)
+-
+-    return result
++    return filterDialogSelectOptions(props.options, store.filter)
+   })
+ 
+   // When the filter changes due to how TUI works, the mousemove might still be triggered
+diff --git a/packages/tui/test/fixture/tui-sdk.ts b/packages/tui/test/fixture/tui-sdk.ts
+index d1cf3c7df..c7ee10c59 100644
+--- a/packages/tui/test/fixture/tui-sdk.ts
++++ b/packages/tui/test/fixture/tui-sdk.ts
+@@ -86,8 +86,18 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof
+     if (url.pathname === "/config/providers") return json({ providers: {}, default: {} })
+     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
+     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })
+-    if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
++    if (url.pathname === "/path")
++      return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
+     if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
++    if (url.pathname === "/directory") {
++      const target = url.searchParams.get("path") ?? directory
++      return json([
++        { name: "subA", absolute: `${target}/subA` },
++        { name: "subB", absolute: `${target}/subB` },
++      ])
++    }
++    if (url.pathname === "/project")
++      return json([{ id: "proj_test", worktree, name: "opencode", time: { created: 0, updated: 0 }, sandboxes: [] }])
+     if (
+       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
+         url.pathname,
+@@ -97,7 +107,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof
+         location: { directory, project: { id: "proj_test", directory: worktree } },
+         data: [],
+       })
+-    if (url.pathname === "/project/current") return json({ id: "proj_test" })
++    if (url.pathname === "/project/current")
++      return json({ id: "proj_test", worktree: url.searchParams.get("directory") ?? directory })
+     if (url.pathname === "/api/reference")
+       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
+
+## Untracked files
+### docs/superpowers/plans/2026-07-08-tui-project-management/index.md
++1: # TUI Project Management Implementation Plan
++2: 
++3: > **For agentic workers:** REQUIRED INTERNAL MODULE: Use `subagent-driven-development` (recommended) or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
++4: 
++5: **Goal:** Add keyboard-first TUI project listing, switching, and project opening without restarting the TUI process.
++6: 
++7: **Architecture:** Add a side-effect-free server directory browse API, regenerate client SDK types, then implement TUI soft project switching and two dialogs: project list and add project. The TUI uses `/projects` for entry, stores no separate project history, and only creates or updates project records when the user confirms a project directory.
++8: 
++9: **Tech Stack:** Effect HttpApi, Bun tests, generated `@opencode-ai/sdk/v2`, SolidJS TUI components, OpenTUI `DialogSelect`, repository `bun typecheck` from package directories.
++10: 
++11: ## Global Constraints
++12: 
++13: - Spec source: `docs/superpowers/specs/2026-07-08-tui-project-management-design.md`.
++14: - Do not add project deletion.
++15: - Do not add a direct command for the add-project page.
++16: - Use `/projects` as the TUI slash command for project list.
++17: - Use `ctrl+o` from project list to open add-project page.
++18: - Add-project search debounce is `10ms`.
++19: - In add-project page, `enter` confirms the input value, not the highlighted selector item.
++20: - In add-project page, `space` copies the highlighted selector item into the input and loads that directory's direct children.
++21: - Directory browsing must not call `InstanceStore.load` or `Project.fromDirectory`.
++22: - After changing public Server `HttpApi`, run `bun run generate` from `packages/client` and do not edit generated files directly.
++23: - Run tests from package directories, never from repository root.
++24: - Run `bun typecheck` from affected package directories, never `tsc` directly.
++25: - Do not commit unless the user explicitly requests it.
++26: 
++27: ---
++28: 
++29: ## Task List
++30: 
++31: | # | Task Title | Task File | Task Status | Blocked By |
++32: |---|------------|-----------|-------------|------------|
++33: | 1 | directory-api | `task-01-directory-api.md` | `done` | `none` |
++34: | 2 | active-dir | `task-02-active-dir.md` | `done` | `none` |
++35: | 3 | project-list | `task-03-project-list.md` | `done` | `2` |
++36: | 4 | add-project | `task-04-add-project.md` | `done` | `1,2,3` |
++37: | 5 | verification | `task-05-verification.md` | `done` | `1,2,3,4` |
++38: 
++39: ## Reference Files
++40: 
++41: - Spec: `docs/superpowers/specs/2026-07-08-tui-project-management-design.md`
++42: - Issue: `docs/isusses/tui-project-management.md`
++43: - HTTP API registry: `packages/opencode/src/server/routes/instance/httpapi/api.ts`
++44: - HTTP API routes: `packages/opencode/src/server/routes/instance/httpapi/server.ts`
++45: - Existing file API: `packages/opencode/src/server/routes/instance/httpapi/groups/file.ts`
++46: - Existing file handler: `packages/opencode/src/server/routes/instance/httpapi/handlers/file.ts`
++47: - Existing project API: `packages/opencode/src/server/routes/instance/httpapi/groups/project.ts`
++48: - Existing project handler: `packages/opencode/src/server/routes/instance/httpapi/handlers/project.ts`
++49: - Project service side effect: `packages/opencode/src/project/project.ts`
++50: - Instance middleware side effect: `packages/opencode/src/server/routes/instance/httpapi/middleware/instance-context.ts`
++51: - TUI app command registration: `packages/tui/src/app.tsx`
++52: - TUI SDK context: `packages/tui/src/context/sdk.tsx`
++53: - TUI project context: `packages/tui/src/context/project.tsx`
++54: - TUI sync context: `packages/tui/src/context/sync.tsx`
++55: - TUI keybind definitions: `packages/tui/src/config/keybind.ts`
++56: - DialogSelect: `packages/tui/src/ui/dialog-select.tsx`
++57: - Web app directory picker reference: `packages/app/src/components/directory-picker-domain.ts`
++58: - Web app project selector reference: `packages/app/src/components/prompt-project-selector.tsx`
++59: - Web app project controls reference: `packages/app/src/pages/session/composer/session-composer-controls.ts`
++60: - Server HTTP API test example: `packages/opencode/test/server/httpapi-file.test.ts`
++61: - TUI SDK fixture: `packages/tui/test/fixture/tui-sdk.ts`
++62: - TUI environment fixture: `packages/tui/test/fixture/tui-environment.tsx`
++63: 
++64: ## Execution Notes
++65: 
++66: - Task 1 changes public HttpApi and must run client generation.
++67: - Task 2 can run independently from Task 1 because it only introduces active-directory switching infrastructure.
++68: - Task 3 depends on Task 2 because project selection must call the soft switch helper.
++69: - Task 4 depends on Task 1 for the generated directory browse SDK and on Task 3 for the project list entry point.
++70: - Task 5 is final verification only and must not change feature behavior unless a prior task missed a requirement.
+
+### docs/superpowers/plans/2026-07-08-tui-project-management/task-01-directory-api.md
++1: # Task 1: Directory API
++2: 
++3: > **Status source:** Update this task's row in `index.md`; do not invent task status elsewhere.
++4: 
++5: **Files:**
++6: - Create: `packages/opencode/src/server/routes/instance/httpapi/groups/directory.ts`
++7: - Create: `packages/opencode/src/server/routes/instance/httpapi/handlers/directory.ts`
++8: - Modify: `packages/opencode/src/server/routes/instance/httpapi/api.ts`
++9: - Modify: `packages/opencode/src/server/routes/instance/httpapi/server.ts`
++10: - Create: `packages/opencode/test/server/httpapi-directory.test.ts`
++11: - Generated by command: `packages/client/src/generated`, `packages/client/src/generated-effect`, and SDK v2 generated files touched by `bun run generate`
++12: 
++13: **Interfaces:**
++14: - Consumes: `FSUtil.Service.readDirectoryEntries(path)`, `FSUtil.Service.isDir(path)`, `FSUtil.Service.resolve(path)` from `@opencode-ai/core/fs-util`.
++15: - Produces: `DirectoryPaths.list = "/directory"`.
++16: - Produces: generated SDK method equivalent to `sdk.client.directory.list({ path: string })` returning `Array<{ name: string; absolute: string }>`.
++17: - Produces: side-effect-free browse endpoint that does not require `InstanceContextMiddleware`.
++18: 
++19: - [ ] **Step 1: Write the failing HTTP API test**
++20: 
++21: Create `packages/opencode/test/server/httpapi-directory.test.ts`:
++22: 
++23: ```ts
++24: import { afterEach, describe, expect, test } from "bun:test"
++25: import { Context } from "effect"
++26: import { mkdir } from "fs/promises"
++27: import path from "path"
++28: import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
++29: import { DirectoryPaths } from "../../src/server/routes/instance/httpapi/groups/directory"
++30: import { resetDatabase } from "../fixture/db"
++31: import { disposeAllInstances, tmpdir } from "../fixture/fixture"
++32: 
++33: const context = Context.empty() as Context.Context<unknown>
++34: 
++35: function request(route: string, query?: Record<string, string>) {
++36:   const url = new URL(`http://localhost${route}`)
++37:   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value)
++38:   return HttpApiApp.webHandler().handler(new Request(url), context)
++39: }
++40: 
++41: afterEach(async () => {
++42:   await disposeAllInstances()
++43:   await resetDatabase()
++44: })
++45: 
++46: describe("directory HttpApi", () => {
++47:   test("lists direct child directories without opening browsed directories as projects", async () => {
++48:     await using tmp = await tmpdir({ git: true })
++49:     const parent = path.join(tmp.path, "parent")
++50:     const subA = path.join(parent, "subA")
++51:     const subB = path.join(parent, "subB")
++52:     await Promise.all([mkdir(subA, { recursive: true }), mkdir(subB, { recursive: true })])
++53:     await Bun.write(path.join(parent, "file.txt"), "ignored")
++54: 
++55:     const response = await request(DirectoryPaths.list, { path: parent })
++56:     expect(response.status).toBe(200)
++57:     expect(await response.json()).toEqual([
++58:       { name: "subA", absolute: subA },
++59:       { name: "subB", absolute: subB },
++60:     ])
++61: 
++62:     const projects = await request("/project", { directory: tmp.path })
++63:     expect(projects.status).toBe(200)
++64:     const body = (await projects.json()) as Array<{ worktree: string }>
++65:     expect(body.some((project) => project.worktree === parent)).toBe(false)
++66:     expect(body.some((project) => project.worktree === subA)).toBe(false)
++67:     expect(body.some((project) => project.worktree === subB)).toBe(false)
++68:   })
++69: 
++70:   test("rejects non-directory paths", async () => {
++71:     await using tmp = await tmpdir()
++72:     const file = path.join(tmp.path, "file.txt")
++73:     await Bun.write(file, "not a directory")
++74: 
++75:     const response = await request(DirectoryPaths.list, { path: file })
++76:     expect(response.status).toBe(400)
++77:   })
++78: })
++79: ```
++80: 
++81: - [ ] **Step 2: Run the focused test and verify RED**
++82: 
++83: Run from `packages/opencode`:
++84: 
++85: ```bash
++86: bun test test/server/httpapi-directory.test.ts
++87: ```
++88: 
++89: Expected result before implementation: FAIL because `groups/directory` and `DirectoryPaths` do not exist.
++90: 
++91: - [ ] **Step 3: Add the directory API group**
++92: 
++93: Create `packages/opencode/src/server/routes/instance/httpapi/groups/directory.ts`:
++94: 
++95: ```ts
++96: import { Schema } from "effect"
++97: import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
++98: import { Authorization } from "../middleware/authorization"
++99: import { described } from "./metadata"
++100: 
++101: export const DirectoryEntry = Schema.Struct({
++102:   name: Schema.String,
++103:   absolute: Schema.String,
++104: }).annotate({ identifier: "DirectoryEntry" })
++105: 
++106: export const DirectoryListQuery = Schema.Struct({
++107:   path: Schema.String,
++108: })
++109: 
++110: export const DirectoryPaths = {
++111:   list: "/directory",
++112: } as const
++113: 
++114: export const DirectoryApi = HttpApi.make("directory")
++115:   .add(
++116:     HttpApiGroup.make("directory")
++117:       .add(
++118:         HttpApiEndpoint.get("list", DirectoryPaths.list, {
++119:           query: DirectoryListQuery,
++120:           success: described(Schema.Array(DirectoryEntry), "Directory entries"),
++121:           error: HttpApiError.BadRequest,
++122:         }).annotateMerge(
++123:           OpenApi.annotations({
++124:             identifier: "directory.list",
++125:             summary: "List directories",
++126:             description: "List direct child directories for an absolute server-side directory path without loading an OpenCode instance.",
++127:           }),
++128:         ),
++129:       )
++130:       .annotateMerge(OpenApi.annotations({ title: "directory", description: "Side-effect-free directory browse routes." }))
++131:       .middleware(Authorization),
++132:   )
++133: ```
++134: 
++135: - [ ] **Step 4: Add the directory handler**
++136: 
++137: Create `packages/opencode/src/server/routes/instance/httpapi/handlers/directory.ts`:
++138: 
++139: ```ts
++140: import { FSUtil } from "@opencode-ai/core/fs-util"
++141: import path from "path"
++142: import { Effect } from "effect"
++143: import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
++144: import { InstanceHttpApi } from "../api"
++145: 
++146: export const directoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "directory", (handlers) =>
++147:   Effect.gen(function* () {
++148:     const fs = yield* FSUtil.Service
++149: 
++150:     const list = Effect.fn("DirectoryHttpApi.list")(function* (ctx: { query: { path: string } }) {
++151:       const directory = yield* fs.resolve(ctx.query.path)
++152:       if (!(yield* fs.isDir(directory))) return yield* new HttpApiError.BadRequest({})
++153:       const entries = yield* fs.readDirectoryEntries(directory).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
++154:       return entries
++155:         .filter((entry) => entry.type === "directory")
++156:         .map((entry) => ({ name: entry.name, absolute: path.join(directory, entry.name) }))
++157:         .sort((a, b) => a.name.localeCompare(b.name))
++158:     })
++159: 
++160:     return handlers.handle("list", list)
++161:   }),
++162: )
++163: ```
++164: 
++165: - [ ] **Step 5: Wire the API and handler**
++166: 
++167: Modify `packages/opencode/src/server/routes/instance/httpapi/api.ts`:
++168: 
++169: ```ts
++170: import { DirectoryApi } from "./groups/directory"
++171: ```
++172: 
++173: Add `DirectoryApi` to `InstanceHttpApi` before `FileApi`:
++174: 
++175: ```ts
++176: export const InstanceHttpApi = HttpApi.make("opencode-instance")
++177:   .addHttpApi(ConfigApi)
++178:   .addHttpApi(DirectoryApi)
++179:   .addHttpApi(ExperimentalApi)
++180: ```
++181: 
++182: Modify `packages/opencode/src/server/routes/instance/httpapi/server.ts`:
++183: 
++184: ```ts
++185: import { directoryHandlers } from "./handlers/directory"
++186: ```
++187: 
++188: Add `directoryHandlers` to the `instanceApiRoutes` handler list before `fileHandlers`:
++189: 
++190: ```ts
++191: Layer.provide([
++192:   configHandlers,
++193:   directoryHandlers,
++194:   experimentalHandlers,
++195:   fileHandlers,
++196: ])
++197: ```
++198: 
++199: - [ ] **Step 6: Generate client and SDK outputs**
++200: 
++201: Run from `packages/client`:
++202: 
++203: ```bash
++204: bun run generate
++205: ```
++206: 
++207: Expected result: generated clients include the new `directory.list` operation. Do not edit generated files directly.
++208: 
++209: - [ ] **Step 7: Run backend validation**
++210: 
++211: Run from `packages/opencode`:
++212: 
++213: ```bash
++214: bun test test/server/httpapi-directory.test.ts
++215: bun typecheck
++216: ```
++217: 
++218: Expected result: both commands pass.
++219: 
++220: - [ ] **Step 8: Leave git uncommitted**
++221: 
++222: Do not commit. Record changed files in the task result and update this task's row in `index.md` only if the user asks you to mark task state.
+
+### docs/superpowers/plans/2026-07-08-tui-project-management/task-02-active-dir.md
++1: # Task 2: Active Dir
++2: 
++3: > **Status source:** Update this task's row in `index.md`; do not invent task status elsewhere.
++4: 
++5: **Files:**
++6: - Modify: `packages/tui/src/context/sdk.tsx`
++7: - Modify: `packages/tui/src/context/project.tsx`
++8: - Create: `packages/tui/src/context/project-switch.tsx`
++9: - Test: `packages/tui/test/context/project-switch.test.tsx`
++10: - Test support: `packages/tui/test/fixture/tui-sdk.ts`
++11: 
++12: **Interfaces:**
++13: - Produces: `useSDK().setDirectory(directory: string): void`.
++14: - Produces: `useSDK().directory` as a dynamic getter instead of a fixed startup property.
++15: - Produces: `useProjectSwitch(): (directory: string) => Promise<void>`.
++16: - Consumes: `useSync().bootstrap({ fatal: false })`, `useProject().workspace.set(undefined)`, `useRoute().navigate({ type: "home" })`, and `useDialog().clear()`.
++17: 
++18: - [ ] **Step 1: Write the failing test**
++19: 
++20: Create `packages/tui/test/context/project-switch.test.tsx`:
++21: 
++22: ```tsx
++23: /** @jsxImportSource @opentui/solid */
++24: import { expect, test } from "bun:test"
++25: import { testRender } from "@opentui/solid"
++26: import { onMount } from "solid-js"
++27: import { ArgsProvider } from "../../src/context/args"
++28: import { KVProvider } from "../../src/context/kv"
++29: import { SDKProvider, useSDK } from "../../src/context/sdk"
++30: import { ProjectProvider } from "../../src/context/project"
++31: import { SyncProvider } from "../../src/context/sync"
++32: import { PermissionProvider } from "../../src/context/permission"
++33: import { ExitProvider } from "../../src/context/exit"
++34: import { DialogProvider } from "../../src/ui/dialog"
++35: import { RouteProvider, useRoute } from "../../src/context/route"
++36: import { useProjectSwitch } from "../../src/context/project-switch"
++37: import { TestTuiContexts } from "../fixture/tui-environment"
++38: import { createEventSource, createFetch, directory, json, worktree } from "../fixture/tui-sdk"
++39: 
++40: test("soft project switch changes sdk directory and returns to home", async () => {
++41:   const target = `${worktree}/packages/app`
++42:   const events = createEventSource()
++43:   const calls: URL[] = []
++44:   const fetch = createFetch((url) => {
++45:     calls.push(url)
++46:     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
++47:     if (url.pathname === "/project/current") return json({ id: url.searchParams.get("directory") === target ? "proj_app" : "proj_tui", worktree })
++48:   }, events)
++49: 
++50:   let switchProject!: (directory: string) => Promise<void>
++51:   let sdk!: ReturnType<typeof useSDK>
++52:   let route!: ReturnType<typeof useRoute>
++53:   let ready!: () => void
++54:   const mounted = new Promise<void>((resolve) => (ready = resolve))
++55: 
++56:   function Probe() {
++57:     sdk = useSDK()
++58:     route = useRoute()
++59:     switchProject = useProjectSwitch()
++60:     onMount(ready)
++61:     return <box />
++62:   }
++63: 
++64:   const app = await testRender(() => (
++65:     <TestTuiContexts>
++66:       <ArgsProvider>
++67:         <KVProvider>
++68:           <RouteProvider>
++69:             <SDKProvider url="http://test" directory={directory} fetch={fetch.fetch} events={events.source}>
++70:               <PermissionProvider>
++71:                 <ProjectProvider>
++72:                   <ExitProvider exit={() => {}}>
++73:                     <SyncProvider>
++74:                       <DialogProvider>
++75:                         <Probe />
++76:                       </DialogProvider>
++77:                     </SyncProvider>
++78:                   </ExitProvider>
++79:                 </ProjectProvider>
++80:               </PermissionProvider>
++81:             </SDKProvider>
++82:           </RouteProvider>
++83:         </KVProvider>
++84:       </ArgsProvider>
++85:     </TestTuiContexts>
++86:   ))
++87: 
++88:   await mounted
++89:   await switchProject(target)
++90: 
++91:   expect(sdk.directory).toBe(target)
++92:   expect(route.data.type).toBe("home")
++93:   expect(calls.some((url) => url.pathname === "/path" && url.searchParams.get("directory") === target)).toBe(true)
++94:   app.destroy()
++95: })
++96: ```
++97: 
++98: - [ ] **Step 2: Run the focused test and verify RED**
++99: 
++100: Run from `packages/tui`:
++101: 
++102: ```bash
++103: bun test test/context/project-switch.test.tsx
++104: ```
++105: 
++106: Expected result before implementation: FAIL because `useProjectSwitch` and `setDirectory` do not exist.
++107: 
++108: - [ ] **Step 3: Make SDK directory dynamic**
++109: 
++110: Modify `packages/tui/src/context/sdk.tsx` import list:
++111: 
++112: ```ts
++113: import { batch, createSignal, onCleanup, onMount } from "solid-js"
++114: ```
++115: 
++116: Inside `init`, replace the fixed SDK setup with:
++117: 
++118: ```ts
++119: const [directory, setDirectorySignal] = createSignal(props.directory)
++120: 
++121: function createSDK(nextDirectory = directory()) {
++122:   return createOpencodeClient({
++123:     baseUrl: props.url,
++124:     signal: abort.signal,
++125:     directory: nextDirectory,
++126:     fetch: props.fetch,
++127:     headers: props.headers,
++128:   })
++129: }
++130: 
++131: let sdk = createSDK()
++132: 
++133: function setDirectory(next: string) {
++134:   if (directory() === next) return
++135:   setDirectorySignal(next)
++136:   sdk = createSDK(next)
++137:   if (!props.events) startSSE()
++138: }
++139: ```
++140: 
++141: Return dynamic accessors:
++142: 
++143: ```ts
++144: return {
++145:   get client() {
++146:     return sdk
++147:   },
++148:   get directory() {
++149:     return directory()
++150:   },
++151:   setDirectory,
++152:   event: emitter,
++153:   fetch: props.fetch ?? fetch,
++154:   url: props.url,
++155: }
++156: ```
++157: 
++158: - [ ] **Step 4: Make project default path use the dynamic SDK directory**
++159: 
++160: In `packages/tui/src/context/project.tsx`, change the fixed `defaultPath` object to a function:
++161: 
++162: ```ts
++163: const defaultPath = () =>
++164:   ({
++165:     home: "",
++166:     state: "",
++167:     config: "",
++168:     worktree: "",
++169:     directory: sdk.directory ?? "",
++170:   }) satisfies Path
++171: ```
++172: 
++173: Use `defaultPath()` in the initial store and in `project.sync()` fallback:
++174: 
++175: ```ts
++176: instance: {
++177:   path: defaultPath(),
++178: }
++179: ```
++180: 
++181: ```ts
++182: setStore("instance", "path", reconcile(instancePath.data || defaultPath()))
++183: ```
++184: 
++185: - [ ] **Step 5: Add the soft switch helper**
++186: 
++187: Create `packages/tui/src/context/project-switch.tsx`:
++188: 
++189: ```tsx
++190: import { useDialog } from "../ui/dialog"
++191: import { useProject } from "./project"
++192: import { useRoute } from "./route"
++193: import { useSDK } from "./sdk"
++194: import { useSync } from "./sync"
++195: 
++196: export function useProjectSwitch() {
++197:   const sdk = useSDK()
++198:   const project = useProject()
++199:   const route = useRoute()
++200:   const sync = useSync()
++201:   const dialog = useDialog()
++202: 
++203:   return async (directory: string) => {
++204:     sdk.setDirectory(directory)
++205:     project.workspace.set(undefined)
++206:     route.navigate({ type: "home" })
++207:     dialog.clear()
++208:     await sync.bootstrap({ fatal: false })
++209:   }
++210: }
++211: ```
++212: 
++213: - [ ] **Step 6: Update the SDK fixture for generated query routing**
++214: 
++215: Modify `packages/tui/test/fixture/tui-sdk.ts` so default `/path` and `/project/current` responses use `url.searchParams.get("directory") ?? directory`. This lets tests observe the dynamic default directory in generated SDK requests.
++216: 
++217: - [ ] **Step 7: Run focused and package validation**
++218: 
++219: Run from `packages/tui`:
++220: 
++221: ```bash
++222: bun test test/context/project-switch.test.tsx
++223: bun typecheck
++224: ```
++225: 
++226: Expected result: both commands pass.
++227: 
++228: - [ ] **Step 8: Leave git uncommitted**
++229: 
++230: Do not commit. Record changed files in the task result and update this task's row in `index.md` only if the user asks you to mark task state.
+
+### docs/superpowers/plans/2026-07-08-tui-project-management/task-03-project-list.md
++1: # Task 3: Project List
++2: 
++3: > **Status source:** Update this task's row in `index.md`; do not invent task status elsewhere.
++4: 
++5: **Files:**
++6: - Create: `packages/tui/src/component/dialog-project-list.tsx`
++7: - Modify: `packages/tui/src/app.tsx`
++8: - Modify: `packages/tui/src/config/keybind.ts`
++9: - Modify: `packages/tui/test/fixture/tui-sdk.ts`
++10: - Test: `packages/tui/test/component/dialog-project-list.test.ts`
++11: 
++12: **Interfaces:**
++13: - Consumes: `useProjectSwitch(): (directory: string) => Promise<void>` from Task 2.
++14: - Consumes: `sdk.client.project.list()` generated/existing SDK method.
++15: - Produces: TUI command `project.list` with slash name `projects`.
++16: - Produces: dialog action command `dialog.project.open` bound to `ctrl+o`.
++17: - Produces: `DialogProjectList(props?: { onOpenProject?: () => void })`.
++18: 
++19: - [ ] **Step 1: Write pure behavior tests**
++20: 
++21: Create `packages/tui/test/component/dialog-project-list.test.ts`:
++22: 
++23: ```ts
++24: import { describe, expect, test } from "bun:test"
++25: import { createProjectListOptions, projectDisplayName, projectSearchText } from "../../src/component/dialog-project-list"
++26: 
++27: describe("dialog project list", () => {
++28:   test("uses project name before worktree basename", () => {
++29:     expect(projectDisplayName({ name: "Named", worktree: "D:/repo/actual" })).toBe("Named")
++30:     expect(projectDisplayName({ worktree: "D:/repo/actual" })).toBe("actual")
++31:     expect(projectDisplayName({ worktree: "/home/leo/opencode/" })).toBe("opencode")
++32:   })
++33: 
++34:   test("search text includes display name and directory", () => {
++35:     expect(projectSearchText({ name: "Named", worktree: "D:/repo/actual" })).toBe("Named\nD:/repo/actual")
++36:   })
++37: 
++38:   test("options include directory detail and current marker", () => {
++39:     const options = createProjectListOptions([
++40:       { id: "proj_a", name: "A", worktree: "/repo/a" },
++41:       { id: "proj_b", worktree: "/repo/b" },
++42:     ], "proj_a")
++43: 
++44:     expect(options.map((option) => option.title)).toEqual(["A", "b"])
++45:     expect(options[0]?.details).toEqual(["/repo/a"])
++46:     expect(options[0]?.value.project.id).toBe("proj_a")
++47:     expect(options[0]?.value.current).toBe(true)
++48:     expect(options[1]?.value.current).toBe(false)
++49:   })
++50: })
++51: ```
++52: 
++53: - [ ] **Step 2: Run the focused test and verify RED**
++54: 
++55: Run from `packages/tui`:
++56: 
++57: ```bash
++58: bun test test/component/dialog-project-list.test.ts
++59: ```
++60: 
++61: Expected result before implementation: FAIL because `dialog-project-list` does not exist.
++62: 
++63: - [ ] **Step 3: Add keybind definitions**
++64: 
++65: Modify `packages/tui/src/config/keybind.ts` definitions:
++66: 
++67: ```ts
++68: project_list: keybind("none", "Switch project"),
++69: "dialog.project.open": keybind("ctrl+o", "Open project directory"),
++70: ```
++71: 
++72: Add to `CommandMap`:
++73: 
++74: ```ts
++75: project_list: "project.list",
++76: ```
++77: 
++78: - [ ] **Step 4: Implement the project list component**
++79: 
++80: Create `packages/tui/src/component/dialog-project-list.tsx`:
++81: 
++82: ```tsx
++83: import { getFilename } from "@opencode-ai/core/util/path"
++84: import type { Project } from "@opencode-ai/sdk/v2"
++85: import { createMemo, createSignal, onMount } from "solid-js"
++86: import { useProject } from "../context/project"
++87: import { useProjectSwitch } from "../context/project-switch"
++88: import { useSDK } from "../context/sdk"
++89: import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
++90: import { useToast } from "../ui/toast"
++91: import { errorMessage } from "../util/error"
++92: 
++93: export type ProjectListItem = Pick<Project, "id" | "name" | "worktree">
++94: type ProjectOption<T extends ProjectListItem = ProjectListItem> = { project: T; current: boolean; search: string }
++95: 
++96: export function projectDisplayName(project: Pick<ProjectListItem, "name" | "worktree">) {
++97:   return project.name || getFilename(project.worktree)
++98: }
++99: 
++100: export function projectSearchText(project: Pick<ProjectListItem, "name" | "worktree">) {
++101:   return `${projectDisplayName(project)}\n${project.worktree}`
++102: }
++103: 
++104: export function createProjectListOptions<T extends ProjectListItem>(
++105:   projects: T[],
++106:   currentProjectID?: string,
++107: ): DialogSelectOption<ProjectOption<T>>[] {
++108:   return projects
++109:     .toSorted((a, b) => projectDisplayName(a).localeCompare(projectDisplayName(b)))
++110:     .map((item) => ({
++111:       title: projectDisplayName(item),
++112:       value: { project: item, current: item.id === currentProjectID, search: projectSearchText(item) },
++113:       details: [item.worktree],
++114:       footer: item.id === currentProjectID ? "current" : undefined,
++115:     }))
++116: }
++117: 
++118: export function DialogProjectList(props: { onOpenProject?: () => void } = {}) {
++119:   const sdk = useSDK()
++120:   const project = useProject()
++121:   const switchProject = useProjectSwitch()
++122:   const toast = useToast()
++123:   const [projects, setProjects] = createSignal<Project[]>([])
++124: 
++125:   const options = createMemo(() => createProjectListOptions(projects(), project.project()))
++126: 
++127:   onMount(() => {
++128:     void sdk.client.project
++129:       .list()
++130:       .then((response) => setProjects(response.data ?? []))
++131:       .catch((error) => toast.show({ variant: "error", title: "Failed to load projects", message: errorMessage(error) }))
++132:   })
++133: 
++134:   return (
++135:     <DialogSelect
++136:       title="Projects"
++137:       placeholder="Search projects"
++138:       options={options()}
++139:       onSelect={(option) => void switchProject(option.value.project.worktree).catch(toast.error)}
++140:       actions={[{ command: "dialog.project.open", title: "open", onTrigger: () => props.onOpenProject?.() }]}
++141:     />
++142:   )
++143: }
++144: ```
++145: 
++146: - [ ] **Step 5: Register `/projects` in the app command list**
++147: 
++148: Modify `packages/tui/src/app.tsx` imports:
++149: 
++150: ```ts
++151: import { DialogProjectList } from "./component/dialog-project-list"
++152: ```
++153: 
++154: Add `"project.list"` to `appBindingCommands`.
++155: 
++156: Add a command to `appCommands` near existing session/workspace commands:
++157: 
++158: ```ts
++159: {
++160:   name: "project.list",
++161:   title: "Switch project",
++162:   category: "Project",
++163:   slashName: "projects",
++164:   run: () => {
++165:     dialog.replace(() => <DialogProjectList />)
++166:   },
++167: }
++168: ```
++169: 
++170: - [ ] **Step 6: Update TUI SDK fixture project list response**
++171: 
++172: Modify `packages/tui/test/fixture/tui-sdk.ts` so `/project` returns at least the current project when no override handles it:
++173: 
++174: ```ts
++175: if (url.pathname === "/project")
++176:   return json([{ id: "proj_test", worktree, name: "opencode", time: { created: 0, updated: 0 }, sandboxes: [] }])
++177: ```
++178: 
++179: - [ ] **Step 7: Run focused and package validation**
++180: 
++181: Run from `packages/tui`:
++182: 
++183: ```bash
++184: bun test test/component/dialog-project-list.test.ts
++185: bun typecheck
++186: ```
++187: 
++188: Expected result: both commands pass.
++189: 
++190: - [ ] **Step 8: Leave git uncommitted**
++191: 
++192: Do not commit. Record changed files in the task result and update this task's row in `index.md` only if the user asks you to mark task state.
+
+### docs/superpowers/plans/2026-07-08-tui-project-management/task-04-add-project.md
++1: # Task 4: Add Project
++2: 
++3: > **Status source:** Update this task's row in `index.md`; do not invent task status elsewhere.
++4: 
++5: **Files:**
++6: - Create: `packages/tui/src/component/dialog-project-add.tsx`
++7: - Modify: `packages/tui/src/component/dialog-project-list.tsx`
++8: - Modify: `packages/tui/src/app.tsx`
++9: - Modify: `packages/tui/test/fixture/tui-sdk.ts`
++10: - Test: `packages/tui/test/component/dialog-project-add.test.ts`
++11: 
++12: **Interfaces:**
++13: - Consumes: generated `sdk.client.directory.list({ path: string })` from Task 1.
++14: - Consumes: `useProjectSwitch(): (directory: string) => Promise<void>` from Task 2.
++15: - Consumes: `DialogProjectList(props: { onOpenProject?: () => void })` from Task 3.
++16: - Produces: `DialogProjectAdd(props: { onBack: () => void })`.
++17: - Produces: pure helpers `projectParentDirectory`, `joinProjectInput`, `filterProjectDirectories`, and `normalizeProjectInput` exported from `dialog-project-add.tsx`.
++18: 
++19: - [ ] **Step 1: Write pure interaction tests**
++20: 
++21: Create `packages/tui/test/component/dialog-project-add.test.ts`:
++22: 
++23: ```ts
++24: import { describe, expect, test } from "bun:test"
++25: import {
++26:   filterProjectDirectories,
++27:   joinProjectInput,
++28:   normalizeProjectInput,
++29:   projectParentDirectory,
++30: } from "../../src/component/dialog-project-add"
++31: 
++32: describe("dialog project add", () => {
++33:   test("starts from the current project parent directory", () => {
++34:     expect(projectParentDirectory("D:/develop/opencode/lucky-cactus")).toBe("D:/develop/opencode")
++35:     expect(projectParentDirectory("/home/leo/opencode/lucky-cactus")).toBe("/home/leo/opencode")
++36:   })
++37: 
++38:   test("typing appends to the current directory input", () => {
++39:     expect(joinProjectInput("D:/develop/opencode", "A")).toBe("D:/develop/opencode/A")
++40:     expect(joinProjectInput("D:/develop/opencode", "D:/other/repo")).toBe("D:/other/repo")
++41:     expect(joinProjectInput("D:/develop/opencode", "D:\\other\\repo")).toBe("D:/other/repo")
++42:   })
++43: 
++44:   test("filters direct child directories with fuzzy matching", () => {
++45:     const items = [
++46:       { name: "subA", absolute: "D:/develop/opencode/subA" },
++47:       { name: "subB", absolute: "D:/develop/opencode/subB" },
++48:     ]
++49:     expect(filterProjectDirectories(items, "D:/develop/opencode/A").map((item) => item.absolute)).toEqual([
++50:       "D:/develop/opencode/subA",
++51:     ])
++52:   })
++53: 
++54:   test("normalizes windows separators for display and comparison", () => {
++55:     expect(normalizeProjectInput("D:\\develop\\opencode\\")).toBe("D:/develop/opencode")
++56:   })
++57: })
++58: ```
++59: 
++60: - [ ] **Step 2: Run the focused test and verify RED**
++61: 
++62: Run from `packages/tui`:
++63: 
++64: ```bash
++65: bun test test/component/dialog-project-add.test.ts
++66: ```
++67: 
++68: Expected result before implementation: FAIL because `dialog-project-add` does not exist.
++69: 
++70: - [ ] **Step 3: Implement path and filter helpers**
++71: 
++72: Create `packages/tui/src/component/dialog-project-add.tsx` and start with these exports:
++73: 
++74: ```tsx
++75: import fuzzysort from "fuzzysort"
++76: import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
++77: import { getDirectory } from "@opencode-ai/core/util/path"
++78: import { TextAttributes } from "@opentui/core"
++79: import { useProject } from "../context/project"
++80: import { useProjectSwitch } from "../context/project-switch"
++81: import { useSDK } from "../context/sdk"
++82: import { useTheme } from "../context/theme"
++83: import { Dialog } from "../ui/dialog"
++84: import { useToast } from "../ui/toast"
++85: import { errorMessage } from "../util/error"
++86: 
++87: export type ProjectDirectoryEntry = { name: string; absolute: string }
++88: 
++89: export function normalizeProjectInput(input: string) {
++90:   const value = input.replaceAll("\\", "/")
++91:   if (/^[A-Za-z]:\/$/.test(value)) return value
++92:   return value.replace(/\/+$/g, "")
++93: }
++94: 
++95: export function projectParentDirectory(input: string) {
++96:   return normalizeProjectInput(getDirectory(normalizeProjectInput(input))).replace(/\/+$/g, "")
++97: }
++98: 
++99: function hasRoot(input: string) {
++100:   return input.startsWith("/") || input.startsWith("//") || /^[A-Za-z]:\//.test(input)
++101: }
++102: 
++103: export function joinProjectInput(base: string, input: string) {
++104:   const value = normalizeProjectInput(input.trim())
++105:   if (!value) return normalizeProjectInput(base)
++106:   if (hasRoot(value)) return value
++107:   return `${normalizeProjectInput(base)}/${value}`
++108: }
++109: 
++110: export function filterProjectDirectories(items: ProjectDirectoryEntry[], input: string) {
++111:   const query = normalizeProjectInput(input).split("/").at(-1) ?? ""
++112:   if (!query) return items
++113:   return fuzzysort.go(query, items, { key: "name" }).map((item) => item.obj)
++114: }
++115: ```
++116: 
++117: - [ ] **Step 4: Implement the custom add-project dialog**
++118: 
++119: Continue `packages/tui/src/component/dialog-project-add.tsx` with a custom input and selector. Use custom UI instead of `DialogSelect` because `space` must copy the selected item into the input and `enter` must confirm the input value.
++120: 
++121: ```tsx
++122: export function DialogProjectAdd(props: { onBack: () => void }) {
++123:   const sdk = useSDK()
++124:   const project = useProject()
++125:   const switchProject = useProjectSwitch()
++126:   const toast = useToast()
++127:   const { theme } = useTheme()
++128:   const [input, setInput] = createSignal(projectParentDirectory(project.instance.directory() || sdk.directory || ""))
++129:   const [browseRoot, setBrowseRoot] = createSignal(input())
++130:   const [items, setItems] = createSignal<ProjectDirectoryEntry[]>([])
++131:   const [selected, setSelected] = createSignal(0)
++132:   const [debouncedInput, setDebouncedInput] = createSignal(input())
++133: 
++134:   const filtered = createMemo(() => filterProjectDirectories(items(), debouncedInput()))
++135: 
++136:   createEffect(() => {
++137:     const next = input()
++138:     const timer = setTimeout(() => setDebouncedInput(next), 10)
++139:     onCleanup(() => clearTimeout(timer))
++140:   })
++141: 
++142:   createEffect(() => {
++143:     setSelected(0)
++144:   })
++145: 
++146:   async function load(path: string) {
++147:     const next = normalizeProjectInput(path)
++148:     const response = await sdk.client.directory.list({ path: next })
++149:     setBrowseRoot(next)
++150:     setInput(next)
++151:     setItems(response.data ?? [])
++152:     setSelected(0)
++153:   }
++154: 
++155:   function move(delta: number) {
++156:     const count = filtered().length
++157:     if (count === 0) return
++158:     setSelected((index) => (index + delta + count) % count)
++159:   }
++160: 
++161:   async function chooseSelected() {
++162:     const item = filtered()[selected()]
++163:     if (!item) return
++164:     await load(item.absolute)
++165:   }
++166: 
++167:   async function confirm() {
++168:     await switchProject(normalizeProjectInput(input()))
++169:   }
++170: 
++171:   onMount(() => {
++172:     void load(input()).catch((error) => toast.show({ variant: "error", title: "Failed to list directories", message: errorMessage(error) }))
++173:   })
++174: 
++175:   return (
++176:     <Dialog title="Open Project">
++177:       <box paddingX={4} paddingBottom={1} flexDirection="column" gap={1}>
++178:         <input
++179:           focusedBackgroundColor={theme.backgroundPanel}
++180:           cursorColor={theme.primary}
++181:           focusedTextColor={theme.text}
++182:           defaultValue={input()}
++183:           onInput={(value) => setInput(joinProjectInput(browseRoot(), value))}
++184:           onKeyDown={(event) => {
++185:             if (event.name === "escape") props.onBack()
++186:             if (event.name === "up") move(-1)
++187:             if (event.name === "down") move(1)
++188:             if (event.name === "space") void chooseSelected().catch(toast.error)
++189:             if (event.name === "return") void confirm().catch(toast.error)
++190:           }}
++191:         />
++192:         <Show when={filtered().length} fallback={<text fg={theme.textMuted}>No directories found</text>}>
++193:           <For each={filtered()}>
++194:             {(item, index) => (
++195:               <text fg={index() === selected() ? theme.primary : theme.text} attributes={index() === selected() ? TextAttributes.BOLD : undefined}>
++196:                 {item.absolute}
++197:               </text>
++198:             )}
++199:           </For>
++200:         </Show>
++201:       </box>
++202:     </Dialog>
++203:   )
++204: }
++205: ```
++206: 
++207: If OpenTUI input key event names differ in the current API, adapt the names to the existing input event shape in `packages/tui/src/ui/dialog-select.tsx` while preserving the exact behavior above.
++208: 
++209: - [ ] **Step 5: Wire project list to add-project and back**
++210: 
++211: Modify `packages/tui/src/app.tsx` import:
++212: 
++213: ```ts
++214: import { DialogProjectAdd } from "./component/dialog-project-add"
++215: ```
++216: 
++217: In the `project.list` command, use local functions so add-project can return to project list:
++218: 
++219: ```tsx
++220: run: () => {
++221:   const openList = () => dialog.replace(() => <DialogProjectList onOpenProject={openAdd} />)
++222:   const openAdd = () => dialog.replace(() => <DialogProjectAdd onBack={openList} />)
++223:   openList()
++224: },
++225: ```
++226: 
++227: - [ ] **Step 6: Update SDK fixture for directory API**
++228: 
++229: Modify `packages/tui/test/fixture/tui-sdk.ts` so `/directory` returns direct children for test paths:
++230: 
++231: ```ts
++232: if (url.pathname === "/directory") {
++233:   const target = url.searchParams.get("path") ?? directory
++234:   return json([
++235:     { name: "subA", absolute: `${target}/subA` },
++236:     { name: "subB", absolute: `${target}/subB` },
++237:   ])
++238: }
++239: ```
++240: 
++241: - [ ] **Step 7: Run focused and package validation**
++242: 
++243: Run from `packages/tui`:
++244: 
++245: ```bash
++246: bun test test/component/dialog-project-add.test.ts test/component/dialog-project-list.test.ts
++247: bun typecheck
++248: ```
++249: 
++250: Expected result: both commands pass.
++251: 
++252: - [ ] **Step 8: Leave git uncommitted**
++253: 
++254: Do not commit. Record changed files in the task result and update this task's row in `index.md` only if the user asks you to mark task state.
+
+### docs/superpowers/plans/2026-07-08-tui-project-management/task-05-verification.md
++1: # Task 5: Verification
++2: 
++3: > **Status source:** Update this task's row in `index.md`; do not invent task status elsewhere.
++4: 
++5: **Files:**
++6: - Read: `docs/superpowers/specs/2026-07-08-tui-project-management-design.md`
++7: - Read: `docs/superpowers/plans/2026-07-08-tui-project-management/index.md`
++8: - Read: files changed by Tasks 1 through 4
++9: - No planned source edits unless verification exposes a missed requirement from the approved spec
++10: 
++11: **Interfaces:**
++12: - Consumes: completed outputs from Tasks 1 through 4.
++13: - Produces: final verification evidence for backend API, generated SDK, TUI project switch, project list, add-project behavior, and type checking.
++14: 
++15: - [ ] **Step 1: Confirm generated files are current**
++16: 
++17: Run from `packages/client`:
++18: 
++19: ```bash
++20: bun run generate
++21: ```
++22: 
++23: Expected result: command exits `0`. If it changes generated files, keep the generated changes because Task 1 changed public Server `HttpApi`.
++24: 
++25: - [ ] **Step 2: Run backend focused tests**
++26: 
++27: Run from `packages/opencode`:
++28: 
++29: ```bash
++30: bun test test/server/httpapi-directory.test.ts
++31: ```
++32: 
++33: Expected result: PASS. This proves directory browsing is side-effect-free and rejects non-directory inputs.
++34: 
++35: - [ ] **Step 3: Run backend typecheck**
++36: 
++37: Run from `packages/opencode`:
++38: 
++39: ```bash
++40: bun typecheck
++41: ```
++42: 
++43: Expected result: PASS.
++44: 
++45: - [ ] **Step 4: Run client typecheck**
++46: 
++47: Run from `packages/client`:
++48: 
++49: ```bash
++50: bun typecheck
++51: ```
++52: 
++53: Expected result: PASS.
++54: 
++55: - [ ] **Step 5: Run TUI focused tests**
++56: 
++57: Run from `packages/tui`:
++58: 
++59: ```bash
++60: bun test test/context/project-switch.test.tsx test/component/dialog-project-list.test.ts test/component/dialog-project-add.test.ts
++61: ```
++62: 
++63: Expected result: PASS. This covers active directory switching, project display/search helpers, and add-project input semantics.
++64: 
++65: - [ ] **Step 6: Run TUI typecheck**
++66: 
++67: Run from `packages/tui`:
++68: 
++69: ```bash
++70: bun typecheck
++71: ```
++72: 
++73: Expected result: PASS.
++74: 
++75: - [ ] **Step 7: Spec coverage review**
++76: 
++77: Check the implementation against these required outcomes:
++78: 
++79: ```text
++80: /projects opens project list
++81: project list uses backend /project
++82: project list searches display name and directory
++83: project list shows display name and directory
++84: project list has no deletion action
++85: ctrl+o opens add-project from project list
++86: add-project has no direct command
++87: esc from add-project returns project list
++88: add-project starts at current project parent directory
++89: selector lists direct child directories
++90: search debounce is 10ms
++91: space copies selected directory into input and loads children
++92: enter confirms input value
++93: confirmed project soft re-enters target home
++94: directory browse API does not call InstanceStore.load or Project.fromDirectory
++95: Windows paths are preserved through TUI input and validated by server-side path resolution
++96: ```
++97: 
++98: Expected result: every line is implemented by code or covered by a focused test. If a line is not covered by code or test, add the smallest missing test or implementation change in the task that owns it.
++99: 
++100: - [ ] **Step 8: Report final state without committing**
++101: 
++102: Do not commit. Report:
++103: 
++104: ```text
++105: status: implemented or blocked
++106: commit: none (not requested)
++107: tests: exact commands and pass/fail results
++108: changed files: concise file list
++109: concerns: remaining risks or none
++110: ```
+
+### docs/superpowers/specs/2026-07-08-tui-project-management-design.md
++1: # TUI Project Management Design
++2: 
++3: ## Context
++4: 
++5: `docs/isusses/tui-project-management.md` defines a new TUI product requirement: users should be able to open a new filesystem directory as a project and switch between existing projects from inside the TUI. This is separate from workspace/worktree management. `/move` and `/warp` stay scoped to the current project boundary and do not satisfy this requirement.
++6: 
++7: The web app already has project selection and project opening behavior. Its directory picker uses server-side SDK calls to list and search directories. The TUI design should use the web app as a reference only where the TUI-specific decisions below do not already define behavior.
++8: 
++9: ## Goals
++10: 
++11: - Add a TUI project list reachable with `/projects`.
++12: - Let users switch to an existing project without restarting the TUI.
++13: - Let users open a new project directory from the project list.
++14: - Keep project deletion out of scope.
++15: - Support Windows absolute paths.
++16: - Show each project with both a display name and directory.
++17: - Preserve TUI keyboard-first interaction.
++18: - Avoid registering browsed intermediate directories as opened projects.
++19: 
++20: ## Non-Goals
++21: 
++22: - No project deletion flow.
++23: - No Windows-style file explorer UI.
++24: - No direct command for the add-project page.
++25: - No automatic jump to the target project's latest session.
++26: - No broad redesign of workspace/worktree management.
++27: 
++28: ## Existing Code Facts
++29: 
++30: - TUI currently has `workspace.list` and `DialogWorkspaceList`, but that flow manages experimental workspaces and includes deletion. It is not the project management flow required here.
++31: - TUI `SDKProvider` currently receives a startup `directory` and creates an SDK client with that default directory.
++32: - TUI `ProjectProvider` and `SyncProvider` derive project, path, sessions, providers, agents, config, VCS, and related state from the SDK default directory plus the current workspace.
++33: - Backend `Project.Service.list()` returns projects stored in `ProjectTable`; `/project` exposes this as the list of projects opened with OpenCode.
++34: - Backend `Project.fromDirectory(directory)` upserts project state and records known directories.
++35: - Existing `file.list` and `find.files` endpoints use `InstanceContextMiddleware`. That middleware calls `InstanceStore.load({ directory })`, which can call `Project.fromDirectory(directory)`. Therefore those endpoints must not be used for side-effect-free browsing of arbitrary parent directories in this feature.
++36: 
++37: ## Architecture
++38: 
++39: Use a TUI soft re-enter model for project switching.
++40: 
++41: When the user selects an existing project or confirms a new project directory:
++42: 
++43: - Update the TUI active project directory.
++44: - Recreate the SDK default directory or remount the project-scoped provider subtree with the target directory.
++45: - Clear the current dialog.
++46: - Navigate to the `home` route.
++47: - Let normal project bootstrap load the target project context.
++48: 
++49: This intentionally behaves like starting the TUI in the target directory, except the process is not restarted. This is preferred over passing `directory` through every SDK call, because explicit per-call routing would be easy to miss and could leave stale project state mixed with the new project.
++50: 
++51: ## Project List Page
++52: 
++53: Entry:
++54: 
++55: - Register a TUI command named `project.list`.
++56: - Use slash name `projects`, so `/projects` opens the project list.
++57: - The add-project page has no independent command entry and can only be opened from this page.
++58: 
++59: Data:
++60: 
++61: - Load existing projects from `sdk.client.project.list()`.
++62: - Do not maintain a separate TUI project history.
++63: - Do not expose project deletion.
++64: 
++65: Display:
++66: 
++67: - Display name priority:
++68:   1. `project.name`, when available.
++69:   2. Basename of `project.worktree`.
++70: - Always show the project directory as secondary detail.
++71: - Mark or highlight the current project.
++72: - Search matches both display name and directory.
++73: 
++74: Keyboard behavior:
++75: 
++76: - Typing filters the project list.
++77: - `up` / `down` moves the selected project.
++78: - `enter` switches to the selected project and soft re-enters its home route.
++79: - `ctrl+o` opens the add-project page.
++80: - `esc` closes the dialog.
++81: 
++82: ## Add Project Page
++83: 
++84: Entry and exit:
++85: 
++86: - The page is only reachable from project list via `ctrl+o`.
++87: - `esc` returns to project list.
++88: - It does not register a command or slash command.
++89: 
++90: Initial state:
++91: 
++92: - The input starts with the parent directory of the current project.
++93: - The selector shows direct child directories under that input directory.
++94: - Example: if the default input is `D:/develop/opencode`, the selector shows entries such as `D:/develop/opencode/subA` and `D:/develop/opencode/subB`.
++95: 
++96: Input and selector semantics:
++97: 
++98: - The input is the source of truth for the project directory that `enter` confirms.
++99: - The selector offers fuzzy-matched direct child directories for the current input context.
++100: - Search filtering uses a `10ms` debounce.
++101: - Typing appends or edits the path in the input.
++102: - Example flow:
++103:   - Initial input: `D:/develop/opencode`.
++104:   - Initial selector: `D:/develop/opencode/subA`, `D:/develop/opencode/subB`, and other direct children.
++105:   - User types `A`.
++106:   - Input becomes `D:/develop/opencode/A`.
++107:   - Selector shows fuzzy matches such as `D:/develop/opencode/subA`.
++108:   - User presses `space`.
++109:   - Input becomes the selected directory, for example `D:/develop/opencode/subA`.
++110:   - Selector reloads direct children of `D:/develop/opencode/subA`.
++111:   - User presses `enter`.
++112:   - The current input value is used as the project directory.
++113: 
++114: Keyboard behavior:
++115: 
++116: - Typing edits the input and filters the current selector layer.
++117: - `up` / `down` moves the selected selector item.
++118: - `space` replaces the input with the selected selector item and loads that directory's direct children.
++119: - `enter` validates and confirms the input value as the project directory. It does not use the selected item unless `space` already copied that item into the input.
++120: - `esc` returns to project list.
++121: 
++122: Path handling:
++123: 
++124: - Support Windows absolute path forms, including drive-letter paths such as `D:/repo` or `D:\repo`.
++125: - Preserve the user's path intent in the TUI input, but normalize enough for comparison, search, and display.
++126: - Server validation resolves the final input path from the server's filesystem perspective.
++127: - The web app picker path helpers may be referenced for missing edge cases, but the confirmed TUI interaction model above has priority.
++128: 
++129: ## Directory Browse API
++130: 
++131: Add a side-effect-free server-side directory browsing API for this feature.
++132: 
++133: Requirements:
++134: 
++135: - Accept a server-side absolute directory path.
++136: - Return direct child directories with name and absolute path.
++137: - Optionally accept a query string or let the TUI filter locally; local TUI filtering is preferred for the current direct-child list.
++138: - Do not use `InstanceContextMiddleware`.
++139: - Do not call `InstanceStore.load`.
++140: - Do not call `Project.fromDirectory`.
++141: - Do not create, update, or touch project rows.
++142: - Do not recursively scan.
++143: - Keep authorization consistent with the existing HTTP API surface.
++144: 
++145: Error behavior:
++146: 
++147: - If the path does not exist, is not a directory, or cannot be read, return a structured error suitable for a toast.
++148: - The TUI remains on the add-project page after browse errors.
++149: - A failed child-directory read does not change the current input.
++150: 
++151: This API exists because the current `file.list` and `find.files` endpoints are not side-effect-free for arbitrary directory browsing.
++152: 
++153: ## Confirming A Project Directory
++154: 
++155: When `enter` is pressed in the add-project page:
++156: 
++157: - Use the current input value as the project directory.
++158: - Validate that the path resolves to an existing directory on the server.
++159: - Trigger the TUI soft re-enter flow for that directory.
++160: - The normal project bootstrap may then call `Project.fromDirectory`, which is the correct moment to create or update the project record.
++161: - Navigate to target project home.
++162: 
++163: ## Error Handling
++164: 
++165: - Existing project switch failure: stay on project list and show an error toast.
++166: - Directory browse failure: stay on add-project page and show an error toast.
++167: - Confirmed input is not a valid directory: stay on add-project page and show an error toast.
++168: - Soft re-enter bootstrap failure: surface the normal TUI bootstrap error behavior for the target directory.
++169: 
++170: ## Testing Requirements
++171: 
++172: - `/projects` opens the project list.
++173: - Project list loads from backend `/project`.
++174: - Project list search matches display name and directory.
++175: - Current project is marked or highlighted.
++176: - Project list does not show deletion actions.
++177: - `ctrl+o` opens the add-project page from project list.
++178: - Add-project page cannot be opened directly by a command.
++179: - `esc` from add-project page returns to project list.
++180: - Add-project initial input is the current project parent directory.
++181: - Add-project selector lists only direct child directories.
++182: - Add-project input filtering uses `10ms` debounce.
++183: - `up` / `down` move selected items in both pages.
++184: - `space` in add-project page copies the selected directory into the input and loads its direct children.
++185: - `enter` in add-project page confirms the input value, not the selected item.
++186: - Confirming a directory soft re-enters the target project home.
++187: - Directory browse API does not call `Project.fromDirectory` and does not add browsed directories to `/project`.
++188: - Windows absolute paths are preserved through the TUI input and parsed by the server-side validation path.
++189: 
++190: ## Implementation Boundaries
++191: 
++192: - Keep changes focused on TUI project management and the minimal backend API needed for side-effect-free directory browsing.
++193: - Do not change workspace deletion, project copy deletion, `/move`, or `/warp` behavior.
++194: - Do not edit generated SDK files directly. If the public Protocol or Server `HttpApi` changes, run the repository generation command from `packages/client` during implementation planning/execution.
++195: - Do not commit unless explicitly requested.
+
+### packages/opencode/src/server/routes/instance/httpapi/groups/directory.ts
++1: import { Schema } from "effect"
++2: import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
++3: import { Authorization } from "../middleware/authorization"
++4: import { described } from "./metadata"
++5: 
++6: export const DirectoryEntry = Schema.Struct({
++7:   name: Schema.String,
++8:   absolute: Schema.String,
++9: }).annotate({ identifier: "DirectoryEntry" })
++10: 
++11: export const DirectoryListQuery = Schema.Struct({
++12:   path: Schema.String,
++13: })
++14: 
++15: export const DirectoryPaths = {
++16:   list: "/directory",
++17: } as const
++18: 
++19: export const DirectoryApi = HttpApi.make("directory")
++20:   .add(
++21:     HttpApiGroup.make("directory")
++22:       .add(
++23:         HttpApiEndpoint.get("list", DirectoryPaths.list, {
++24:           query: DirectoryListQuery,
++25:           success: described(Schema.Array(DirectoryEntry), "Directory entries"),
++26:           error: HttpApiError.BadRequest,
++27:         }).annotateMerge(
++28:           OpenApi.annotations({
++29:             identifier: "directory.list",
++30:             summary: "List directories",
++31:             description: "List direct child directories for an absolute server-side directory path without loading an OpenCode instance.",
++32:           }),
++33:         ),
++34:       )
++35:       .annotateMerge(OpenApi.annotations({ title: "directory", description: "Side-effect-free directory browse routes." }))
++36:       .middleware(Authorization),
++37:   )
+
+### packages/opencode/src/server/routes/instance/httpapi/handlers/directory.ts
++1: import { FSUtil } from "@opencode-ai/core/fs-util"
++2: import { Effect } from "effect"
++3: import path from "path"
++4: import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
++5: import { InstanceHttpApi } from "../api"
++6: 
++7: export const directoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "directory", (handlers) =>
++8:   Effect.gen(function* () {
++9:     const fs = yield* FSUtil.Service
++10: 
++11:     const list = Effect.fn("DirectoryHttpApi.list")(function* (ctx: { query: { path: string } }) {
++12:       const directory = yield* fs.resolve(ctx.query.path)
++13:       if (!(yield* fs.isDir(directory))) return yield* new HttpApiError.BadRequest({})
++14:       const entries = yield* fs.readDirectoryEntries(directory).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
++15:       return entries
++16:         .filter((entry) => entry.type === "directory")
++17:         .map((entry) => ({ name: entry.name, absolute: path.join(directory, entry.name) }))
++18:         .sort((a, b) => a.name.localeCompare(b.name))
++19:     })
++20: 
++21:     return handlers.handle("list", list)
++22:   }),
++23: )
+
+### packages/opencode/test/server/httpapi-directory.test.ts
++1: import { afterEach, describe, expect, test } from "bun:test"
++2: import { Context } from "effect"
++3: import { mkdir } from "fs/promises"
++4: import path from "path"
++5: import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
++6: import { DirectoryPaths } from "../../src/server/routes/instance/httpapi/groups/directory"
++7: import { resetDatabase } from "../fixture/db"
++8: import { disposeAllInstances, tmpdir } from "../fixture/fixture"
++9: 
++10: const context = Context.empty() as Context.Context<unknown>
++11: 
++12: function request(route: string, query?: Record<string, string>) {
++13:   const url = new URL(`http://localhost${route}`)
++14:   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value)
++15:   return HttpApiApp.webHandler().handler(new Request(url), context)
++16: }
++17: 
++18: afterEach(async () => {
++19:   await disposeAllInstances()
++20:   await resetDatabase()
++21: })
++22: 
++23: describe("directory HttpApi", () => {
++24:   test(
++25:     "lists direct child directories without opening browsed directories as projects",
++26:     async () => {
++27:       await using tmp = await tmpdir({ git: true })
++28:       const parent = path.join(tmp.path, "parent")
++29:       const subA = path.join(parent, "subA")
++30:       const subB = path.join(parent, "subB")
++31:       await Promise.all([mkdir(subA, { recursive: true }), mkdir(subB, { recursive: true })])
++32:       await Bun.write(path.join(parent, "file.txt"), "ignored")
++33: 
++34:       const response = await request(DirectoryPaths.list, { path: parent })
++35:       expect(response.status).toBe(200)
++36:       expect(await response.json()).toEqual([
++37:         { name: "subA", absolute: subA },
++38:         { name: "subB", absolute: subB },
++39:       ])
++40: 
++41:       const projects = await request("/project", { directory: tmp.path })
++42:       expect(projects.status).toBe(200)
++43:       const body = (await projects.json()) as Array<{ worktree: string }>
++44:       expect(body.some((project) => project.worktree === parent)).toBe(false)
++45:       expect(body.some((project) => project.worktree === subA)).toBe(false)
++46:       expect(body.some((project) => project.worktree === subB)).toBe(false)
++47:     },
++48:     15_000,
++49:   )
++50: 
++51:   test("rejects non-directory paths", async () => {
++52:     await using tmp = await tmpdir()
++53:     const file = path.join(tmp.path, "file.txt")
++54:     await Bun.write(file, "not a directory")
++55: 
++56:     const response = await request(DirectoryPaths.list, { path: file })
++57:     expect(response.status).toBe(400)
++58:   })
++59: })
+
+### packages/tui/src/component/dialog-project-add.tsx
++1: import { getDirectory } from "@opencode-ai/core/util/path"
++2: import { InputRenderable, TextAttributes } from "@opentui/core"
++3: import fuzzysort from "fuzzysort"
++4: import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
++5: import { useProject } from "../context/project"
++6: import { useProjectSwitch } from "../context/project-switch"
++7: import { useSDK } from "../context/sdk"
++8: import { useTheme } from "../context/theme"
++9: import { useToast } from "../ui/toast"
++10: import { errorMessage } from "../util/error"
++11: 
++12: export type ProjectDirectoryEntry = { name: string; absolute: string }
++13: 
++14: export function normalizeProjectInput(input: string) {
++15:   const value = input.replaceAll("\\", "/")
++16:   if (/^[A-Za-z]:\/$/.test(value)) return value
++17:   return value.replace(/\/+$/g, "")
++18: }
++19: 
++20: export function projectParentDirectory(input: string) {
++21:   return normalizeProjectInput(getDirectory(normalizeProjectInput(input))).replace(/\/+$/g, "")
++22: }
++23: 
++24: function hasRoot(input: string) {
++25:   return input.startsWith("/") || input.startsWith("//") || /^[A-Za-z]:\//.test(input)
++26: }
++27: 
++28: export function joinProjectInput(base: string, input: string) {
++29:   const value = normalizeProjectInput(input.trim())
++30:   if (!value) return normalizeProjectInput(base)
++31:   if (hasRoot(value)) return value
++32:   return `${normalizeProjectInput(base)}/${value}`
++33: }
++34: 
++35: export function filterProjectDirectories(items: ProjectDirectoryEntry[], input: string) {
++36:   const query = normalizeProjectInput(input).split("/").at(-1) ?? ""
++37:   if (!query) return items
++38:   return fuzzysort.go(query, items, { key: "name" }).map((item) => item.obj)
++39: }
++40: 
++41: export function DialogProjectAdd(props: { onBack: () => void }) {
++42:   const sdk = useSDK()
++43:   const project = useProject()
++44:   const switchProject = useProjectSwitch()
++45:   const toast = useToast()
++46:   const { theme } = useTheme()
++47:   const [input, setInput] = createSignal(projectParentDirectory(project.instance.directory() || sdk.directory || ""))
++48:   const [browseRoot, setBrowseRoot] = createSignal(input())
++49:   const [items, setItems] = createSignal<ProjectDirectoryEntry[]>([])
++50:   const [selected, setSelected] = createSignal(0)
++51:   const [debouncedInput, setDebouncedInput] = createSignal(input())
++52:   let inputRef: InputRenderable | undefined
++53: 
++54:   const filtered = createMemo(() => filterProjectDirectories(items(), debouncedInput()))
++55: 
++56:   createEffect(() => {
++57:     const next = input()
++58:     const timer = setTimeout(() => setDebouncedInput(next), 10)
++59:     onCleanup(() => clearTimeout(timer))
++60:   })
++61: 
++62:   createEffect(() => {
++63:     filtered()
++64:     setSelected(0)
++65:   })
++66: 
++67:   async function load(path: string) {
++68:     const next = normalizeProjectInput(path)
++69:     const response = await sdk.client.directory.list({ path: next })
++70:     setBrowseRoot(next)
++71:     setInput(next)
++72:     if (inputRef) inputRef.value = next
++73:     setItems(response.data ?? [])
++74:     setSelected(0)
++75:   }
++76: 
++77:   function move(delta: number) {
++78:     const count = filtered().length
++79:     if (count === 0) return
++80:     setSelected((index) => (index + delta + count) % count)
++81:   }
++82: 
++83:   async function chooseSelected() {
++84:     const item = filtered()[selected()]
++85:     if (!item) return
++86:     await load(item.absolute)
++87:   }
++88: 
++89:   async function confirm() {
++90:     await switchProject(normalizeProjectInput(input()))
++91:   }
++92: 
++93:   onMount(() => {
++94:     void load(input()).catch((error) =>
++95:       toast.show({ variant: "error", title: "Failed to list directories", message: errorMessage(error) }),
++96:     )
++97:   })
++98: 
++99:   return (
++100:     <box gap={1} paddingBottom={1} flexGrow={1}>
++101:       <box paddingLeft={4} paddingRight={4}>
++102:         <box flexDirection="row" justifyContent="space-between">
++103:           <text fg={theme.text} attributes={TextAttributes.BOLD}>
++104:             Open Project
++105:           </text>
++106:           <text fg={theme.textMuted}>
++107:             esc
++108:           </text>
++109:         </box>
++110:       </box>
++111:       <box paddingX={4} paddingBottom={1} flexDirection="column" gap={1}>
++112:         <input
++113:           focusedBackgroundColor={theme.backgroundPanel}
++114:           cursorColor={theme.primary}
++115:           focusedTextColor={theme.text}
++116:           ref={(element) => {
++117:             inputRef = element
++118:             inputRef.value = input()
++119:             setTimeout(() => {
++120:               if (!inputRef || inputRef.isDestroyed) return
++121:               inputRef.focus()
++122:             }, 1)
++123:           }}
++124:           onInput={(value) => setInput(joinProjectInput(browseRoot(), value))}
++125:           onKeyDown={(event) => {
++126:             if (event.name === "escape") props.onBack()
++127:             if (event.name === "up") move(-1)
++128:             if (event.name === "down") move(1)
++129:             if (event.name === "space") void chooseSelected().catch(toast.error)
++130:             if (event.name === "return") void confirm().catch(toast.error)
++131:           }}
++132:         />
++133:         <Show when={filtered().length} fallback={<text fg={theme.textMuted}>No directories found</text>}>
++134:           <For each={filtered()}>
++135:             {(item, index) => (
++136:               <text
++137:                 fg={index() === selected() ? theme.primary : theme.text}
++138:                 attributes={index() === selected() ? TextAttributes.BOLD : undefined}
++139:               >
++140:                 {item.absolute}
++141:               </text>
++142:             )}
++143:           </For>
++144:         </Show>
++145:       </box>
++146:     </box>
++147:   )
++148: }
+
+### packages/tui/src/component/dialog-project-list.tsx
++1: import { getFilename } from "@opencode-ai/core/util/path"
++2: import type { Project } from "@opencode-ai/sdk/v2"
++3: import { createMemo, createSignal, onMount } from "solid-js"
++4: import { useProject } from "../context/project"
++5: import { useProjectSwitch } from "../context/project-switch"
++6: import { useSDK } from "../context/sdk"
++7: import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
++8: import { useToast } from "../ui/toast"
++9: import { errorMessage } from "../util/error"
++10: 
++11: export type ProjectListItem = Pick<Project, "id" | "name" | "worktree">
++12: type ProjectOption<T extends ProjectListItem = ProjectListItem> = { project: T; current: boolean }
++13: 
++14: export function projectDisplayName(project: Pick<ProjectListItem, "name" | "worktree">) {
++15:   return project.name || getFilename(project.worktree)
++16: }
++17: 
++18: export function projectSearchText(project: Pick<ProjectListItem, "name" | "worktree">) {
++19:   return `${projectDisplayName(project)}\n${project.worktree}`
++20: }
++21: 
++22: export function createProjectListOptions<T extends ProjectListItem>(
++23:   projects: T[],
++24:   currentProjectID?: string,
++25: ): DialogSelectOption<ProjectOption<T>>[] {
++26:   return projects
++27:     .toSorted((a, b) => projectDisplayName(a).localeCompare(projectDisplayName(b)))
++28:     .map((item) => ({
++29:       title: projectDisplayName(item),
++30:       value: { project: item, current: item.id === currentProjectID },
++31:       search: projectSearchText(item),
++32:       details: [item.worktree],
++33:       footer: item.id === currentProjectID ? "current" : undefined,
++34:     }))
++35: }
++36: 
++37: export function DialogProjectList(props: { onOpenProject?: () => void } = {}) {
++38:   const sdk = useSDK()
++39:   const project = useProject()
++40:   const switchProject = useProjectSwitch()
++41:   const toast = useToast()
++42:   const [projects, setProjects] = createSignal<Project[]>([])
++43: 
++44:   const options = createMemo(() => createProjectListOptions(projects(), project.project()))
++45: 
++46:   onMount(() => {
++47:     void sdk.client.project
++48:       .list()
++49:       .then((response) => setProjects(response.data ?? []))
++50:       .catch((error) => toast.show({ variant: "error", title: "Failed to load projects", message: errorMessage(error) }))
++51:   })
++52: 
++53:   return (
++54:     <DialogSelect
++55:       title="Projects"
++56:       placeholder="Search projects"
++57:       options={options()}
++58:       onSelect={(option) => void switchProject(option.value.project.worktree).catch(toast.error)}
++59:       actions={[{ command: "dialog.project.open", title: "open", onTrigger: () => props.onOpenProject?.() }]}
++60:     />
++61:   )
++62: }
+
+### packages/tui/src/context/project-switch.tsx
++1: import { useDialog } from "../ui/dialog"
++2: import { useProject } from "./project"
++3: import { useRoute } from "./route"
++4: import { useSDK } from "./sdk"
++5: import { useSync } from "./sync"
++6: 
++7: export function useProjectSwitch() {
++8:   const sdk = useSDK()
++9:   const project = useProject()
++10:   const route = useRoute()
++11:   const sync = useSync()
++12:   const dialog = useDialog()
++13: 
++14:   return async (directory: string) => {
++15:     sdk.setDirectory(directory)
++16:     project.workspace.set(undefined)
++17:     route.navigate({ type: "home" })
++18:     dialog.clear()
++19:     await sync.bootstrap({ fatal: false })
++20:   }
++21: }
+
+### packages/tui/test/component/dialog-project-add.test.ts
++1: import { describe, expect, test } from "bun:test"
++2: import {
++3:   filterProjectDirectories,
++4:   joinProjectInput,
++5:   normalizeProjectInput,
++6:   projectParentDirectory,
++7: } from "../../src/component/dialog-project-add"
++8: 
++9: describe("dialog project add", () => {
++10:   test("starts from the current project parent directory", () => {
++11:     expect(projectParentDirectory("D:/develop/opencode/lucky-cactus")).toBe("D:/develop/opencode")
++12:     expect(projectParentDirectory("/home/leo/opencode/lucky-cactus")).toBe("/home/leo/opencode")
++13:   })
++14: 
++15:   test("typing appends to the current directory input", () => {
++16:     expect(joinProjectInput("D:/develop/opencode", "A")).toBe("D:/develop/opencode/A")
++17:     expect(joinProjectInput("D:/develop/opencode", "D:/other/repo")).toBe("D:/other/repo")
++18:     expect(joinProjectInput("D:/develop/opencode", "D:\\other\\repo")).toBe("D:/other/repo")
++19:   })
++20: 
++21:   test("filters direct child directories with fuzzy matching", () => {
++22:     const items = [
++23:       { name: "subA", absolute: "D:/develop/opencode/subA" },
++24:       { name: "subB", absolute: "D:/develop/opencode/subB" },
++25:     ]
++26:     expect(filterProjectDirectories(items, "D:/develop/opencode/A").map((item) => item.absolute)).toEqual([
++27:       "D:/develop/opencode/subA",
++28:     ])
++29:   })
++30: 
++31:   test("normalizes windows separators for display and comparison", () => {
++32:     expect(normalizeProjectInput("D:\\develop\\opencode\\")).toBe("D:/develop/opencode")
++33:   })
++34: })
+
+### packages/tui/test/component/dialog-project-list.test.ts
++1: import { describe, expect, test } from "bun:test"
++2: import { createProjectListOptions, projectDisplayName, projectSearchText } from "../../src/component/dialog-project-list"
++3: import { filterDialogSelectOptions } from "../../src/ui/dialog-select"
++4: 
++5: describe("dialog project list", () => {
++6:   test("uses project name before worktree basename", () => {
++7:     expect(projectDisplayName({ name: "Named", worktree: "D:/repo/actual" })).toBe("Named")
++8:     expect(projectDisplayName({ worktree: "D:/repo/actual" })).toBe("actual")
++9:     expect(projectDisplayName({ worktree: "/home/leo/opencode/" })).toBe("opencode")
++10:   })
++11: 
++12:   test("search text includes display name and directory", () => {
++13:     expect(projectSearchText({ name: "Named", worktree: "D:/repo/actual" })).toBe("Named\nD:/repo/actual")
++14:   })
++15: 
++16:   test("options include directory detail and current marker", () => {
++17:     const options = createProjectListOptions(
++18:       [
++19:         { id: "proj_a", name: "A", worktree: "/repo/a" },
++20:         { id: "proj_b", worktree: "/repo/b" },
++21:       ],
++22:       "proj_a",
++23:     )
++24: 
++25:     expect(options.map((option) => option.title)).toEqual(["A", "b"])
++26:     expect(options[0]?.details).toEqual(["/repo/a"])
++27:     expect(options[0]?.search).toBe("A\n/repo/a")
++28:     expect(options[0]?.value.project.id).toBe("proj_a")
++29:     expect(options[0]?.value.current).toBe(true)
++30:     expect(options[1]?.value.current).toBe(false)
++31:   })
++32: 
++33:   test("filters options by directory", () => {
++34:     const options = createProjectListOptions([
++35:       { id: "proj_alpha", name: "Alpha", worktree: "/workspace/client" },
++36:       { id: "proj_beta", name: "Beta", worktree: "/workspace/server" },
++37:     ])
++38: 
++39:     expect(filterDialogSelectOptions(options, "server").map((option) => option.value.project.id)).toEqual(["proj_beta"])
++40:   })
++41: })
+
+### packages/tui/test/context/project-switch.test.tsx
++1: /** @jsxImportSource @opentui/solid */
++2: import { expect, test } from "bun:test"
++3: import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
++4: import { testRender, useRenderer } from "@opentui/solid"
++5: import { mkdir } from "node:fs/promises"
++6: import { onCleanup, onMount } from "solid-js"
++7: import { ArgsProvider } from "../../src/context/args"
++8: import { ClipboardProvider } from "../../src/context/clipboard"
++9: import { KVProvider } from "../../src/context/kv"
++10: import { SDKProvider, useSDK } from "../../src/context/sdk"
++11: import { ProjectProvider } from "../../src/context/project"
++12: import { SyncProvider } from "../../src/context/sync"
++13: import { PermissionProvider } from "../../src/context/permission"
++14: import { ExitProvider } from "../../src/context/exit"
++15: import { DialogProvider } from "../../src/ui/dialog"
++16: import { ToastProvider } from "../../src/ui/toast"
++17: import { RouteProvider, useRoute } from "../../src/context/route"
++18: import { useProjectSwitch } from "../../src/context/project-switch"
++19: import { OpencodeKeymapProvider, registerOpencodeKeymap } from "../../src/keymap"
++20: import { TestTuiContexts } from "../fixture/tui-environment"
++21: import { createTuiResolvedConfig } from "../fixture/tui-runtime"
++22: import { createEventSource, createFetch, directory, json, worktree } from "../fixture/tui-sdk"
++23: 
++24: test("soft project switch changes sdk directory and returns to home", async () => {
++25:   const target = `${worktree}/packages/app`
++26:   await mkdir(`${worktree}/state`, { recursive: true })
++27:   await Bun.write(`${worktree}/state/kv.json`, "{}")
++28:   const events = createEventSource()
++29:   const calls: URL[] = []
++30:   const fetch = createFetch((url) => {
++31:     calls.push(url)
++32:     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
++33:     if (url.pathname === "/project/current") return json({ id: url.searchParams.get("directory") === target ? "proj_app" : "proj_tui", worktree })
++34:   }, events)
++35: 
++36:   let switchProject!: (directory: string) => Promise<void>
++37:   let sdk!: ReturnType<typeof useSDK>
++38:   let route!: ReturnType<typeof useRoute>
++39:   let ready!: () => void
++40:   const mounted = new Promise<void>((resolve) => (ready = resolve))
++41: 
++42:   function Probe() {
++43:     sdk = useSDK()
++44:     route = useRoute()
++45:     switchProject = useProjectSwitch()
++46:     onMount(ready)
++47:     return <box />
++48:   }
++49: 
++50:   function Harness() {
++51:     const renderer = useRenderer()
++52:     const keymap = createDefaultOpenTuiKeymap(renderer)
++53:     const off = registerOpencodeKeymap(keymap, renderer, createTuiResolvedConfig())
++54:     onCleanup(off)
++55: 
++56:     return (
++57:       <OpencodeKeymapProvider keymap={keymap}>
++58:         <TestTuiContexts>
++59:           <ArgsProvider>
++60:             <KVProvider>
++61:               <RouteProvider>
++62:                 <SDKProvider url="http://test" directory={directory} fetch={fetch.fetch} events={events.source}>
++63:                   <PermissionProvider>
++64:                     <ProjectProvider>
++65:                       <ExitProvider exit={() => {}}>
++66:                         <SyncProvider>
++67:                           <ToastProvider>
++68:                             <ClipboardProvider value={{}}>
++69:                               <DialogProvider>
++70:                                 <Probe />
++71:                               </DialogProvider>
++72:                             </ClipboardProvider>
++73:                           </ToastProvider>
++74:                         </SyncProvider>
++75:                       </ExitProvider>
++76:                     </ProjectProvider>
++77:                   </PermissionProvider>
++78:                 </SDKProvider>
++79:               </RouteProvider>
++80:             </KVProvider>
++81:           </ArgsProvider>
++82:         </TestTuiContexts>
++83:       </OpencodeKeymapProvider>
++84:     )
++85:   }
++86: 
++87:   const app = await testRender(() => <Harness />)
++88: 
++89:   await mounted
++90:   await switchProject(target)
++91: 
++92:   expect(sdk.directory).toBe(target)
++93:   expect(route.data.type).toBe("home")
++94:   expect(calls.some((url) => url.pathname === "/path" && url.searchParams.get("directory") === target)).toBe(true)
++95:   app.renderer.destroy()
++96: })
+

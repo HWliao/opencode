@@ -2,7 +2,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createSimpleContext } from "./helper"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
@@ -20,17 +20,26 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const abort = new AbortController()
     let sse: AbortController | undefined
 
-    function createSDK() {
+    const [directory, setDirectorySignal] = createSignal(props.directory)
+
+    function createSDK(nextDirectory = directory()) {
       return createOpencodeClient({
         baseUrl: props.url,
         signal: abort.signal,
-        directory: props.directory,
+        directory: nextDirectory,
         fetch: props.fetch,
         headers: props.headers,
       })
     }
 
     let sdk = createSDK()
+
+    function setDirectory(next: string) {
+      if (directory() === next) return
+      setDirectorySignal(next)
+      sdk = createSDK(next)
+      if (!props.events) startSSE()
+    }
 
     const handlers = new Set<(event: GlobalEvent) => void>()
     const emitter = {
@@ -142,7 +151,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       get client() {
         return sdk
       },
-      directory: props.directory,
+      get directory() {
+        return directory()
+      },
+      setDirectory,
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,

@@ -57,6 +57,7 @@ export interface DialogSelectOption<T = any> {
   title: string
   titleView?: JSX.Element
   value: T
+  search?: string
   description?: string
   details?: string[]
   footer?: JSX.Element | string
@@ -69,6 +70,23 @@ export interface DialogSelectOption<T = any> {
   gutter?: () => JSX.Element
   margin?: JSX.Element
   onSelect?: (ctx: DialogContext) => void
+}
+
+export function filterDialogSelectOptions<T>(options: DialogSelectOption<T>[], query: string) {
+  const needle = query.toLowerCase()
+  const available = pipe(
+    options,
+    filter((x) => x.disabled !== true),
+  )
+  if (!needle) return available
+
+  // Prioritize title matches over category/search matches. Users typically search by the item name.
+  return fuzzysort
+    .go(needle, available, {
+      keys: ["title", "category", "search"],
+      scoreFn: (r) => r[0].score * 2 + r[1].score + r[2].score,
+    })
+    .map((x) => x.obj)
 }
 
 export type DialogSelectRef<T> = {
@@ -142,7 +160,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   ])
   const actionItems = createMemo(() =>
     visibleActions()
-      .filter(isActionItem)
+      .filter((item): item is Action & { label: string } => isActionItem(item))
       .filter((item) => !isActionDisabled(item)),
   )
 
@@ -153,23 +171,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const filtered = createMemo(() => {
     if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
-    const needle = store.filter.toLowerCase()
-    const options = pipe(
-      props.options,
-      filter((x) => x.disabled !== true),
-    )
-    if (!needle) return options
-
-    // prioritize title matches (weight: 2) over category matches (weight: 1).
-    // users typically search by the item name, and not its category.
-    const result = fuzzysort
-      .go(needle, options, {
-        keys: ["title", "category"],
-        scoreFn: (r) => r[0].score * 2 + r[1].score,
-      })
-      .map((x) => x.obj)
-
-    return result
+    return filterDialogSelectOptions(props.options, store.filter)
   })
 
   // When the filter changes due to how TUI works, the mousemove might still be triggered
@@ -437,14 +439,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           name: item.command,
           title: item.title,
           category: "Dialog",
-          run() {
-            if (props.locked) return
-            if (isActionDisabled(item)) return
-            setStore("input", "keyboard")
-            const option = selected()
-            if (!option) return
-            item.onTrigger(option)
-          },
+          run: () => triggerAction(item),
         })),
       ],
       bindings: [
@@ -500,7 +495,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
-  function triggerAction(item: VisibleAction | undefined) {
+  function triggerAction(item: Action | VisibleAction | undefined) {
     if (props.locked) return
     if (!item || !isActionItem(item) || isActionDisabled(item)) return
     setStore("input", "keyboard")
@@ -509,7 +504,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     item.onTrigger(option)
   }
 
-  function isActionItem(item: VisibleAction): item is Action & { label: string } {
+  function isActionItem(item: VisibleAction): item is Action & { label: string }
+  function isActionItem(item: Action | VisibleAction): item is Action
+  function isActionItem(item: Action | VisibleAction) {
     return "onTrigger" in item
   }
 

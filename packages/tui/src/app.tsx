@@ -49,6 +49,8 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
+import { DialogProjectAdd } from "./component/dialog-project-add"
+import { DialogProjectList } from "./component/dialog-project-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -126,6 +128,7 @@ const appBindingCommands = [
   "help.show",
   "docs.open",
   "diff.open",
+  "project.list",
   "workspace.list",
   "app.debug",
   "app.console",
@@ -590,6 +593,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "project.list",
+        title: "Switch project",
+        category: "Project",
+        slashName: "projects",
+        run: () => {
+          const openList = () => dialog.replace(() => <DialogProjectList onOpenProject={openAdd} />)
+          const openAdd = () => dialog.replace(() => <DialogProjectAdd onBack={openList} />)
+          openList()
         },
       },
       {

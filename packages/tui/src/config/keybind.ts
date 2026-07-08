@@ -157,6 +157,7 @@ export const Definitions = {
   prompt_stash_pop: keybind("none", "Pop stashed prompt"),
   prompt_stash_list: keybind("none", "List stashed prompts"),
   workspace_set: keybind("none", "Set workspace"),
+  project_list: keybind("none", "Switch project"),
 
   input_clear: keybind("ctrl+c", "Clear input field"),
   input_paste: keybind({ key: "ctrl+v", preventDefault: false }, "Paste from clipboard"),
@@ -211,6 +212,7 @@ export const Definitions = {
   "dialog.move_session.new": keybind("ctrl+m", "New project copy"),
   "dialog.move_session.delete": keybind("ctrl+d", "Delete project copy"),
   "dialog.move_session.refresh": keybind("ctrl+r", "Refresh project copies"),
+  "dialog.project.open": keybind("ctrl+o", "Open project directory"),
   "prompt.autocomplete.prev": keybind("up,ctrl+p", "Move to previous autocomplete item"),
   "prompt.autocomplete.next": keybind("down,ctrl+n", "Move to next autocomplete item"),
   "prompt.autocomplete.hide": keybind("escape", "Hide autocomplete"),
@@ -361,6 +363,7 @@ export const CommandMap = {
   prompt_stash_pop: "prompt.stash.pop",
   prompt_stash_list: "prompt.stash.list",
   workspace_set: "workspace.set",
+  project_list: "project.list",
   input_clear: "prompt.clear",
   input_paste: "prompt.paste",
   input_submit: "input.submit",

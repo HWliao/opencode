@@ -1,0 +1,282 @@
+# Review package: Task 1 directory-api
+
+## Git status
+ M packages/opencode/src/server/routes/instance/httpapi/api.ts
+ M packages/opencode/src/server/routes/instance/httpapi/server.ts
+ M packages/sdk/js/src/v2/gen/sdk.gen.ts
+ M packages/sdk/js/src/v2/gen/types.gen.ts
+?? packages/opencode/src/server/routes/instance/httpapi/groups/directory.ts
+?? packages/opencode/src/server/routes/instance/httpapi/handlers/directory.ts
+?? packages/opencode/test/server/httpapi-directory.test.ts
+
+## Diff tracked files
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/api.ts b/packages/opencode/src/server/routes/instance/httpapi/api.ts
+index f5076ad08..68ceda175 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/api.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/api.ts
+@@ -10,6 +10,7 @@ import { Question } from "@/question"
+ import { ConfigApi } from "./groups/config"
+ import { ControlApi } from "./groups/control"
+ import { ControlPlaneApi } from "./groups/control-plane"
++import { DirectoryApi } from "./groups/directory"
+ import { EventApi } from "./groups/event"
+ import { ExperimentalApi } from "./groups/experimental"
+ import { FileApi } from "./groups/file"
+@@ -60,6 +61,7 @@ export const RootHttpApi = HttpApi.make("opencode-root")
+ 
+ export const InstanceHttpApi = HttpApi.make("opencode-instance")
+   .addHttpApi(ConfigApi)
++  .addHttpApi(DirectoryApi)
+   .addHttpApi(ExperimentalApi)
+   .addHttpApi(FileApi)
+   .addHttpApi(InstanceApi)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/server.ts b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+index fb9d2db65..ae2d86ed4 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/server.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+@@ -85,6 +85,7 @@ import { eventHandlers } from "./handlers/event"
+ import { configHandlers } from "./handlers/config"
+ import { controlHandlers } from "./handlers/control"
+ import { controlPlaneHandlers } from "./handlers/control-plane"
++import { directoryHandlers } from "./handlers/directory"
+ import { experimentalHandlers } from "./handlers/experimental"
+ import { fileHandlers } from "./handlers/file"
+ import { globalHandlers } from "./handlers/global"
+@@ -154,6 +155,7 @@ const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
+ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
+   Layer.provide([
+     configHandlers,
++    directoryHandlers,
+     experimentalHandlers,
+     fileHandlers,
+     instanceHandlers,
+diff --git a/packages/sdk/js/src/v2/gen/sdk.gen.ts b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+index 049627675..4d4fd8a8a 100644
+--- a/packages/sdk/js/src/v2/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+@@ -24,6 +24,8 @@ import type {
+   ConfigProvidersResponses,
+   ConfigUpdateErrors,
+   ConfigUpdateResponses,
++  DirectoryListErrors,
++  DirectoryListResponses,
+   EventSubscribeResponses,
+   EventTuiCommandExecute,
+   EventTuiPromptAppend,
+@@ -1513,6 +1515,27 @@ export class Config2 extends HeyApiClient {
+   }
+ }
+ 
++export class Directory extends HeyApiClient {
++  /**
++   * List directories
++   *
++   * List direct child directories for an absolute server-side directory path without loading an OpenCode instance.
++   */
++  public list<ThrowOnError extends boolean = false>(
++    parameters: {
++      path: string
++    },
++    options?: Options<never, ThrowOnError>,
++  ) {
++    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "path" }] }])
++    return (options?.client ?? this.client).get<DirectoryListResponses, DirectoryListErrors, ThrowOnError>({
++      url: "/directory",
++      ...options,
++      ...params,
++    })
++  }
++}
++
+ export class Tool extends HeyApiClient {
+   /**
+    * List tools
+@@ -7116,6 +7139,11 @@ export class OpencodeClient extends HeyApiClient {
+     return (this._config ??= new Config2({ client: this.client }))
+   }
+ 
++  private _directory?: Directory
++  get directory(): Directory {
++    return (this._directory ??= new Directory({ client: this.client }))
++  }
++
+   private _tool?: Tool
+   get tool(): Tool {
+     return (this._tool ??= new Tool({ client: this.client }))
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index dc6aad95d..218de00d0 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -2121,6 +2121,11 @@ export type Provider = {
+   }
+ }
+ 
++export type DirectoryEntry = {
++  name: string
++  absolute: string
++}
++
+ export type ExperimentalCapabilities = {
+   backgroundSubagents: boolean
+ }
+@@ -7489,6 +7494,33 @@ export type ConfigProvidersResponses = {
+ 
+ export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+ 
++export type DirectoryListData = {
++  body?: never
++  path?: never
++  query: {
++    path: string
++  }
++  url: "/directory"
++}
++
++export type DirectoryListErrors = {
++  /**
++   * BadRequest | InvalidRequestError
++   */
++  400: EffectHttpApiErrorBadRequest | InvalidRequestError
++}
++
++export type DirectoryListError = DirectoryListErrors[keyof DirectoryListErrors]
++
++export type DirectoryListResponses = {
++  /**
++   * Directory entries
++   */
++  200: Array<DirectoryEntry>
++}
++
++export type DirectoryListResponse = DirectoryListResponses[keyof DirectoryListResponses]
++
+ export type ExperimentalCapabilitiesGetData = {
+   body?: never
+   path?: never
+
+## New files
+### packages/opencode/src/server/routes/instance/httpapi/groups/directory.ts
++1: import { Schema } from "effect"
++2: import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
++3: import { Authorization } from "../middleware/authorization"
++4: import { described } from "./metadata"
++5: 
++6: export const DirectoryEntry = Schema.Struct({
++7:   name: Schema.String,
++8:   absolute: Schema.String,
++9: }).annotate({ identifier: "DirectoryEntry" })
++10: 
++11: export const DirectoryListQuery = Schema.Struct({
++12:   path: Schema.String,
++13: })
++14: 
++15: export const DirectoryPaths = {
++16:   list: "/directory",
++17: } as const
++18: 
++19: export const DirectoryApi = HttpApi.make("directory")
++20:   .add(
++21:     HttpApiGroup.make("directory")
++22:       .add(
++23:         HttpApiEndpoint.get("list", DirectoryPaths.list, {
++24:           query: DirectoryListQuery,
++25:           success: described(Schema.Array(DirectoryEntry), "Directory entries"),
++26:           error: HttpApiError.BadRequest,
++27:         }).annotateMerge(
++28:           OpenApi.annotations({
++29:             identifier: "directory.list",
++30:             summary: "List directories",
++31:             description: "List direct child directories for an absolute server-side directory path without loading an OpenCode instance.",
++32:           }),
++33:         ),
++34:       )
++35:       .annotateMerge(OpenApi.annotations({ title: "directory", description: "Side-effect-free directory browse routes." }))
++36:       .middleware(Authorization),
++37:   )
+
+### packages/opencode/src/server/routes/instance/httpapi/handlers/directory.ts
++1: import { FSUtil } from "@opencode-ai/core/fs-util"
++2: import { Effect } from "effect"
++3: import path from "path"
++4: import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
++5: import { InstanceHttpApi } from "../api"
++6: 
++7: export const directoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "directory", (handlers) =>
++8:   Effect.gen(function* () {
++9:     const fs = yield* FSUtil.Service
++10: 
++11:     const list = Effect.fn("DirectoryHttpApi.list")(function* (ctx: { query: { path: string } }) {
++12:       const directory = yield* fs.resolve(ctx.query.path)
++13:       if (!(yield* fs.isDir(directory))) return yield* new HttpApiError.BadRequest({})
++14:       const entries = yield* fs.readDirectoryEntries(directory).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
++15:       return entries
++16:         .filter((entry) => entry.type === "directory")
++17:         .map((entry) => ({ name: entry.name, absolute: path.join(directory, entry.name) }))
++18:         .sort((a, b) => a.name.localeCompare(b.name))
++19:     })
++20: 
++21:     return handlers.handle("list", list)
++22:   }),
++23: )
+
+### packages/opencode/test/server/httpapi-directory.test.ts
++1: import { afterEach, describe, expect, test } from "bun:test"
++2: import { Context } from "effect"
++3: import { mkdir } from "fs/promises"
++4: import path from "path"
++5: import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
++6: import { DirectoryPaths } from "../../src/server/routes/instance/httpapi/groups/directory"
++7: import { resetDatabase } from "../fixture/db"
++8: import { disposeAllInstances, tmpdir } from "../fixture/fixture"
++9: 
++10: const context = Context.empty() as Context.Context<unknown>
++11: 
++12: function request(route: string, query?: Record<string, string>) {
++13:   const url = new URL(`http://localhost${route}`)
++14:   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value)
++15:   return HttpApiApp.webHandler().handler(new Request(url), context)
++16: }
++17: 
++18: afterEach(async () => {
++19:   await disposeAllInstances()
++20:   await resetDatabase()
++21: })
++22: 
++23: describe("directory HttpApi", () => {
++24:   test(
++25:     "lists direct child directories without opening browsed directories as projects",
++26:     async () => {
++27:       await using tmp = await tmpdir({ git: true })
++28:       const parent = path.join(tmp.path, "parent")
++29:       const subA = path.join(parent, "subA")
++30:       const subB = path.join(parent, "subB")
++31:       await Promise.all([mkdir(subA, { recursive: true }), mkdir(subB, { recursive: true })])
++32:       await Bun.write(path.join(parent, "file.txt"), "ignored")
++33: 
++34:       const response = await request(DirectoryPaths.list, { path: parent })
++35:       expect(response.status).toBe(200)
++36:       expect(await response.json()).toEqual([
++37:         { name: "subA", absolute: subA },
++38:         { name: "subB", absolute: subB },
++39:       ])
++40: 
++41:       const projects = await request("/project", { directory: tmp.path })
++42:       expect(projects.status).toBe(200)
++43:       const body = (await projects.json()) as Array<{ worktree: string }>
++44:       expect(body.some((project) => project.worktree === parent)).toBe(false)
++45:       expect(body.some((project) => project.worktree === subA)).toBe(false)
++46:       expect(body.some((project) => project.worktree === subB)).toBe(false)
++47:     },
++48:     15_000,
++49:   )
++50: 
++51:   test("rejects non-directory paths", async () => {
++52:     await using tmp = await tmpdir()
++53:     const file = path.join(tmp.path, "file.txt")
++54:     await Bun.write(file, "not a directory")
++55: 
++56:     const response = await request(DirectoryPaths.list, { path: file })
++57:     expect(response.status).toBe(400)
++58:   })
++59: })
+

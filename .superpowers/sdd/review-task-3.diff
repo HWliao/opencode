@@ -1,0 +1,198 @@
+# Review package: Task 3 project-list
+
+## Git status
+ M packages/tui/src/app.tsx
+ M packages/tui/src/config/keybind.ts
+ M packages/tui/test/fixture/tui-sdk.ts
+?? packages/tui/src/component/dialog-project-list.tsx
+?? packages/tui/test/component/dialog-project-list.test.ts
+
+## Diff tracked files
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index d36d58c42..9392ee36c 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -49,6 +49,7 @@ import { DialogHelp } from "./ui/dialog-help"
+ import { DialogAgent } from "./component/dialog-agent"
+ import { DialogSessionList } from "./component/dialog-session-list"
+ import { DialogWorkspaceList } from "./component/dialog-workspace-list"
++import { DialogProjectList } from "./component/dialog-project-list"
+ import { DialogConsoleOrg } from "./component/dialog-console-org"
+ import { ThemeProvider, useTheme } from "./context/theme"
+ import { Home } from "./routes/home"
+@@ -126,6 +127,7 @@ const appBindingCommands = [
+   "help.show",
+   "docs.open",
+   "diff.open",
++  "project.list",
+   "workspace.list",
+   "app.debug",
+   "app.console",
+@@ -592,6 +594,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
+           dialog.clear()
+         },
+       },
++      {
++        name: "project.list",
++        title: "Switch project",
++        category: "Project",
++        slashName: "projects",
++        run: () => {
++          dialog.replace(() => <DialogProjectList />)
++        },
++      },
+       {
+         name: "workspace.copy_path",
+         title: "Copy worktree path",
+diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybind.ts
+index 5dd7e4b5a..4c296b839 100644
+--- a/packages/tui/src/config/keybind.ts
++++ b/packages/tui/src/config/keybind.ts
+@@ -157,6 +157,7 @@ export const Definitions = {
+   prompt_stash_pop: keybind("none", "Pop stashed prompt"),
+   prompt_stash_list: keybind("none", "List stashed prompts"),
+   workspace_set: keybind("none", "Set workspace"),
++  project_list: keybind("none", "Switch project"),
+ 
+   input_clear: keybind("ctrl+c", "Clear input field"),
+   input_paste: keybind({ key: "ctrl+v", preventDefault: false }, "Paste from clipboard"),
+@@ -211,6 +212,7 @@ export const Definitions = {
+   "dialog.move_session.new": keybind("ctrl+m", "New project copy"),
+   "dialog.move_session.delete": keybind("ctrl+d", "Delete project copy"),
+   "dialog.move_session.refresh": keybind("ctrl+r", "Refresh project copies"),
++  "dialog.project.open": keybind("ctrl+o", "Open project directory"),
+   "prompt.autocomplete.prev": keybind("up,ctrl+p", "Move to previous autocomplete item"),
+   "prompt.autocomplete.next": keybind("down,ctrl+n", "Move to next autocomplete item"),
+   "prompt.autocomplete.hide": keybind("escape", "Hide autocomplete"),
+@@ -361,6 +363,7 @@ export const CommandMap = {
+   prompt_stash_pop: "prompt.stash.pop",
+   prompt_stash_list: "prompt.stash.list",
+   workspace_set: "workspace.set",
++  project_list: "project.list",
+   input_clear: "prompt.clear",
+   input_paste: "prompt.paste",
+   input_submit: "input.submit",
+diff --git a/packages/tui/test/fixture/tui-sdk.ts b/packages/tui/test/fixture/tui-sdk.ts
+index d1cf3c7df..5b99e89a6 100644
+--- a/packages/tui/test/fixture/tui-sdk.ts
++++ b/packages/tui/test/fixture/tui-sdk.ts
+@@ -86,8 +86,11 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof
+     if (url.pathname === "/config/providers") return json({ providers: {}, default: {} })
+     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
+     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })
+-    if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
++    if (url.pathname === "/path")
++      return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
+     if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
++    if (url.pathname === "/project")
++      return json([{ id: "proj_test", worktree, name: "opencode", time: { created: 0, updated: 0 }, sandboxes: [] }])
+     if (
+       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
+         url.pathname,
+@@ -97,7 +100,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof
+         location: { directory, project: { id: "proj_test", directory: worktree } },
+         data: [],
+       })
+-    if (url.pathname === "/project/current") return json({ id: "proj_test" })
++    if (url.pathname === "/project/current")
++      return json({ id: "proj_test", worktree: url.searchParams.get("directory") ?? directory })
+     if (url.pathname === "/api/reference")
+       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
+
+## New files
+### packages/tui/src/component/dialog-project-list.tsx
++1: import { getFilename } from "@opencode-ai/core/util/path"
++2: import type { Project } from "@opencode-ai/sdk/v2"
++3: import { createMemo, createSignal, onMount } from "solid-js"
++4: import { useProject } from "../context/project"
++5: import { useProjectSwitch } from "../context/project-switch"
++6: import { useSDK } from "../context/sdk"
++7: import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
++8: import { useToast } from "../ui/toast"
++9: import { errorMessage } from "../util/error"
++10: 
++11: export type ProjectListItem = Pick<Project, "id" | "name" | "worktree">
++12: type ProjectOption<T extends ProjectListItem = ProjectListItem> = { project: T; current: boolean; search: string }
++13: 
++14: export function projectDisplayName(project: Pick<ProjectListItem, "name" | "worktree">) {
++15:   return project.name || getFilename(project.worktree)
++16: }
++17: 
++18: export function projectSearchText(project: Pick<ProjectListItem, "name" | "worktree">) {
++19:   return `${projectDisplayName(project)}\n${project.worktree}`
++20: }
++21: 
++22: export function createProjectListOptions<T extends ProjectListItem>(
++23:   projects: T[],
++24:   currentProjectID?: string,
++25: ): DialogSelectOption<ProjectOption<T>>[] {
++26:   return projects
++27:     .toSorted((a, b) => projectDisplayName(a).localeCompare(projectDisplayName(b)))
++28:     .map((item) => ({
++29:       title: projectDisplayName(item),
++30:       value: { project: item, current: item.id === currentProjectID, search: projectSearchText(item) },
++31:       details: [item.worktree],
++32:       footer: item.id === currentProjectID ? "current" : undefined,
++33:     }))
++34: }
++35: 
++36: export function DialogProjectList(props: { onOpenProject?: () => void } = {}) {
++37:   const sdk = useSDK()
++38:   const project = useProject()
++39:   const switchProject = useProjectSwitch()
++40:   const toast = useToast()
++41:   const [projects, setProjects] = createSignal<Project[]>([])
++42: 
++43:   const options = createMemo(() => createProjectListOptions(projects(), project.project()))
++44: 
++45:   onMount(() => {
++46:     void sdk.client.project
++47:       .list()
++48:       .then((response) => setProjects(response.data ?? []))
++49:       .catch((error) => toast.show({ variant: "error", title: "Failed to load projects", message: errorMessage(error) }))
++50:   })
++51: 
++52:   return (
++53:     <DialogSelect
++54:       title="Projects"
++55:       placeholder="Search projects"
++56:       options={options()}
++57:       onSelect={(option) => void switchProject(option.value.project.worktree).catch(toast.error)}
++58:       actions={[{ command: "dialog.project.open", title: "open", onTrigger: () => props.onOpenProject?.() }]}
++59:     />
++60:   )
++61: }
+
+### packages/tui/test/component/dialog-project-list.test.ts
++1: import { describe, expect, test } from "bun:test"
++2: import { createProjectListOptions, projectDisplayName, projectSearchText } from "../../src/component/dialog-project-list"
++3: 
++4: describe("dialog project list", () => {
++5:   test("uses project name before worktree basename", () => {
++6:     expect(projectDisplayName({ name: "Named", worktree: "D:/repo/actual" })).toBe("Named")
++7:     expect(projectDisplayName({ worktree: "D:/repo/actual" })).toBe("actual")
++8:     expect(projectDisplayName({ worktree: "/home/leo/opencode/" })).toBe("opencode")
++9:   })
++10: 
++11:   test("search text includes display name and directory", () => {
++12:     expect(projectSearchText({ name: "Named", worktree: "D:/repo/actual" })).toBe("Named\nD:/repo/actual")
++13:   })
++14: 
++15:   test("options include directory detail and current marker", () => {
++16:     const options = createProjectListOptions(
++17:       [
++18:         { id: "proj_a", name: "A", worktree: "/repo/a" },
++19:         { id: "proj_b", worktree: "/repo/b" },
++20:       ],
++21:       "proj_a",
++22:     )
++23: 
++24:     expect(options.map((option) => option.title)).toEqual(["A", "b"])
++25:     expect(options[0]?.details).toEqual(["/repo/a"])
++26:     expect(options[0]?.value.project.id).toBe("proj_a")
++27:     expect(options[0]?.value.current).toBe(true)
++28:     expect(options[1]?.value.current).toBe(false)
++29:   })
++30: })
+

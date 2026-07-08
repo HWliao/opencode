@@ -1,0 +1,256 @@
+# Review package: Task 2 active-dir
+
+## Git status
+ M packages/tui/src/context/project.tsx
+ M packages/tui/src/context/sdk.tsx
+ M packages/tui/test/fixture/tui-sdk.ts
+?? packages/tui/src/context/project-switch.tsx
+?? packages/tui/test/context/project-switch.test.tsx
+
+## Diff tracked files
+diff --git a/packages/tui/src/context/project.tsx b/packages/tui/src/context/project.tsx
+index d73a17e7e..744645958 100644
+--- a/packages/tui/src/context/project.tsx
++++ b/packages/tui/src/context/project.tsx
+@@ -11,13 +11,14 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
+   init: () => {
+     const sdk = useSDK()
+ 
+-    const defaultPath = {
+-      home: "",
+-      state: "",
+-      config: "",
+-      worktree: "",
+-      directory: sdk.directory ?? "",
+-    } satisfies Path
++    const defaultPath = () =>
++      ({
++        home: "",
++        state: "",
++        config: "",
++        worktree: "",
++        directory: sdk.directory ?? "",
++      }) satisfies Path
+ 
+     const [store, setStore] = createStore({
+       project: {
+@@ -26,7 +27,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
+         mainDir: undefined as string | undefined,
+       },
+       instance: {
+-        path: defaultPath,
++        path: defaultPath(),
+       },
+       workspace: {
+         current: undefined as string | undefined,
+@@ -45,7 +46,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
+         ? await sdk.client.project.directories({ projectID: project.data.id, workspace })
+         : undefined
+       batch(() => {
+-        setStore("instance", "path", reconcile(instancePath.data || defaultPath))
++        setStore("instance", "path", reconcile(instancePath.data || defaultPath()))
+         setStore("project", "id", project.data?.id)
+         setStore("project", "worktree", project.data?.worktree)
+         setStore("project", "mainDir", directories?.data?.findLast((item) => item.strategy === undefined)?.directory)
+diff --git a/packages/tui/src/context/sdk.tsx b/packages/tui/src/context/sdk.tsx
+index 93180c6e2..9fd0048ef 100644
+--- a/packages/tui/src/context/sdk.tsx
++++ b/packages/tui/src/context/sdk.tsx
+@@ -2,7 +2,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+ import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+ import { Flag } from "@opencode-ai/core/flag/flag"
+ import { createSimpleContext } from "./helper"
+-import { batch, onCleanup, onMount } from "solid-js"
++import { batch, createSignal, onCleanup, onMount } from "solid-js"
+ 
+ export type EventSource = {
+   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
+@@ -20,11 +20,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+     const abort = new AbortController()
+     let sse: AbortController | undefined
+ 
+-    function createSDK() {
++    const [directory, setDirectorySignal] = createSignal(props.directory)
++
++    function createSDK(nextDirectory = directory()) {
+       return createOpencodeClient({
+         baseUrl: props.url,
+         signal: abort.signal,
+-        directory: props.directory,
++        directory: nextDirectory,
+         fetch: props.fetch,
+         headers: props.headers,
+       })
+@@ -32,6 +34,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+ 
+     let sdk = createSDK()
+ 
++    function setDirectory(next: string) {
++      if (directory() === next) return
++      setDirectorySignal(next)
++      sdk = createSDK(next)
++      if (!props.events) startSSE()
++    }
++
+     const handlers = new Set<(event: GlobalEvent) => void>()
+     const emitter = {
+       emit(_type: "event", event: GlobalEvent) {
+@@ -142,7 +151,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+       get client() {
+         return sdk
+       },
+-      directory: props.directory,
++      get directory() {
++        return directory()
++      },
++      setDirectory,
+       event: emitter,
+       fetch: props.fetch ?? fetch,
+       url: props.url,
+diff --git a/packages/tui/test/fixture/tui-sdk.ts b/packages/tui/test/fixture/tui-sdk.ts
+index d1cf3c7df..a3e142cfc 100644
+--- a/packages/tui/test/fixture/tui-sdk.ts
++++ b/packages/tui/test/fixture/tui-sdk.ts
+@@ -86,7 +86,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof
+     if (url.pathname === "/config/providers") return json({ providers: {}, default: {} })
+     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
+     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })
+-    if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
++    if (url.pathname === "/path")
++      return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
+     if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
+     if (
+       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
+@@ -97,7 +98,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof
+         location: { directory, project: { id: "proj_test", directory: worktree } },
+         data: [],
+       })
+-    if (url.pathname === "/project/current") return json({ id: "proj_test" })
++    if (url.pathname === "/project/current")
++      return json({ id: "proj_test", worktree: url.searchParams.get("directory") ?? directory })
+     if (url.pathname === "/api/reference")
+       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
+
+## New files
+### packages/tui/src/context/project-switch.tsx
++1: import { useDialog } from "../ui/dialog"
++2: import { useProject } from "./project"
++3: import { useRoute } from "./route"
++4: import { useSDK } from "./sdk"
++5: import { useSync } from "./sync"
++6: 
++7: export function useProjectSwitch() {
++8:   const sdk = useSDK()
++9:   const project = useProject()
++10:   const route = useRoute()
++11:   const sync = useSync()
++12:   const dialog = useDialog()
++13: 
++14:   return async (directory: string) => {
++15:     sdk.setDirectory(directory)
++16:     project.workspace.set(undefined)
++17:     route.navigate({ type: "home" })
++18:     dialog.clear()
++19:     await sync.bootstrap({ fatal: false })
++20:   }
++21: }
+
+### packages/tui/test/context/project-switch.test.tsx
++1: /** @jsxImportSource @opentui/solid */
++2: import { expect, test } from "bun:test"
++3: import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
++4: import { testRender, useRenderer } from "@opentui/solid"
++5: import { mkdir } from "node:fs/promises"
++6: import { onCleanup, onMount } from "solid-js"
++7: import { ArgsProvider } from "../../src/context/args"
++8: import { ClipboardProvider } from "../../src/context/clipboard"
++9: import { KVProvider } from "../../src/context/kv"
++10: import { SDKProvider, useSDK } from "../../src/context/sdk"
++11: import { ProjectProvider } from "../../src/context/project"
++12: import { SyncProvider } from "../../src/context/sync"
++13: import { PermissionProvider } from "../../src/context/permission"
++14: import { ExitProvider } from "../../src/context/exit"
++15: import { DialogProvider } from "../../src/ui/dialog"
++16: import { ToastProvider } from "../../src/ui/toast"
++17: import { RouteProvider, useRoute } from "../../src/context/route"
++18: import { useProjectSwitch } from "../../src/context/project-switch"
++19: import { OpencodeKeymapProvider, registerOpencodeKeymap } from "../../src/keymap"
++20: import { TestTuiContexts } from "../fixture/tui-environment"
++21: import { createTuiResolvedConfig } from "../fixture/tui-runtime"
++22: import { createEventSource, createFetch, directory, json, worktree } from "../fixture/tui-sdk"
++23: 
++24: test("soft project switch changes sdk directory and returns to home", async () => {
++25:   const target = `${worktree}/packages/app`
++26:   await mkdir(`${worktree}/state`, { recursive: true })
++27:   await Bun.write(`${worktree}/state/kv.json`, "{}")
++28:   const events = createEventSource()
++29:   const calls: URL[] = []
++30:   const fetch = createFetch((url) => {
++31:     calls.push(url)
++32:     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
++33:     if (url.pathname === "/project/current") return json({ id: url.searchParams.get("directory") === target ? "proj_app" : "proj_tui", worktree })
++34:   }, events)
++35: 
++36:   let switchProject!: (directory: string) => Promise<void>
++37:   let sdk!: ReturnType<typeof useSDK>
++38:   let route!: ReturnType<typeof useRoute>
++39:   let ready!: () => void
++40:   const mounted = new Promise<void>((resolve) => (ready = resolve))
++41: 
++42:   function Probe() {
++43:     sdk = useSDK()
++44:     route = useRoute()
++45:     switchProject = useProjectSwitch()
++46:     onMount(ready)
++47:     return <box />
++48:   }
++49: 
++50:   function Harness() {
++51:     const renderer = useRenderer()
++52:     const keymap = createDefaultOpenTuiKeymap(renderer)
++53:     const off = registerOpencodeKeymap(keymap, renderer, createTuiResolvedConfig())
++54:     onCleanup(off)
++55: 
++56:     return (
++57:       <OpencodeKeymapProvider keymap={keymap}>
++58:         <TestTuiContexts>
++59:           <ArgsProvider>
++60:             <KVProvider>
++61:               <RouteProvider>
++62:                 <SDKProvider url="http://test" directory={directory} fetch={fetch.fetch} events={events.source}>
++63:                   <PermissionProvider>
++64:                     <ProjectProvider>
++65:                       <ExitProvider exit={() => {}}>
++66:                         <SyncProvider>
++67:                           <ToastProvider>
++68:                             <ClipboardProvider value={{}}>
++69:                               <DialogProvider>
++70:                                 <Probe />
++71:                               </DialogProvider>
++72:                             </ClipboardProvider>
++73:                           </ToastProvider>
++74:                         </SyncProvider>
++75:                       </ExitProvider>
++76:                     </ProjectProvider>
++77:                   </PermissionProvider>
++78:                 </SDKProvider>
++79:               </RouteProvider>
++80:             </KVProvider>
++81:           </ArgsProvider>
++82:         </TestTuiContexts>
++83:       </OpencodeKeymapProvider>
++84:     )
++85:   }
++86: 
++87:   const app = await testRender(() => <Harness />)
++88: 
++89:   await mounted
++90:   await switchProject(target)
++91: 
++92:   expect(sdk.directory).toBe(target)
++93:   expect(route.data.type).toBe("home")
++94:   expect(calls.some((url) => url.pathname === "/path" && url.searchParams.get("directory") === target)).toBe(true)
++95:   app.renderer.destroy()
++96: })
+

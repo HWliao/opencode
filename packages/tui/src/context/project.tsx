@@ -11,13 +11,14 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
   init: () => {
     const sdk = useSDK()
 
-    const defaultPath = {
-      home: "",
-      state: "",
-      config: "",
-      worktree: "",
-      directory: sdk.directory ?? "",
-    } satisfies Path
+    const defaultPath = () =>
+      ({
+        home: "",
+        state: "",
+        config: "",
+        worktree: "",
+        directory: sdk.directory ?? "",
+      }) satisfies Path
 
     const [store, setStore] = createStore({
       project: {
@@ -26,7 +27,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         mainDir: undefined as string | undefined,
       },
       instance: {
-        path: defaultPath,
+        path: defaultPath(),
       },
       workspace: {
         current: undefined as string | undefined,
@@ -45,7 +46,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         ? await sdk.client.project.directories({ projectID: project.data.id, workspace })
         : undefined
       batch(() => {
-        setStore("instance", "path", reconcile(instancePath.data || defaultPath))
+        setStore("instance", "path", reconcile(instancePath.data || defaultPath()))
         setStore("project", "id", project.data?.id)
         setStore("project", "worktree", project.data?.worktree)
         setStore("project", "mainDir", directories?.data?.findLast((item) => item.strategy === undefined)?.directory)

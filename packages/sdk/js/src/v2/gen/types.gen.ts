@@ -2122,6 +2122,11 @@ export type Provider = {
   }
 }
 
+export type DirectoryEntry = {
+  name: string
+  absolute: string
+}
+
 export type ExperimentalCapabilities = {
   backgroundSubagents: boolean
 }
@@ -7489,6 +7494,33 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type DirectoryListData = {
+  body?: never
+  path?: never
+  query: {
+    path: string
+  }
+  url: "/directory"
+}
+
+export type DirectoryListErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type DirectoryListError = DirectoryListErrors[keyof DirectoryListErrors]
+
+export type DirectoryListResponses = {
+  /**
+   * Directory entries
+   */
+  200: Array<DirectoryEntry>
+}
+
+export type DirectoryListResponse = DirectoryListResponses[keyof DirectoryListResponses]
 
 export type ExperimentalCapabilitiesGetData = {
   body?: never

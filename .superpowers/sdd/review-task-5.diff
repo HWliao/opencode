@@ -1,0 +1,76 @@
+# Review package: Task 5 verification
+
+## Git status
+?? .superpowers/sdd/task-5-report.md
+?? docs/superpowers/plans/2026-07-08-tui-project-management/index.md
+
+## Diff tracked files
+
+## Report files
+### .superpowers/sdd/task-5-report.md
++1: # Task 5 Verification Report
++2: 
++3: ## Status
++4: 
++5: status: implemented
++6: commit: none (not requested)
++7: 
++8: ## Commands Run
++9: 
++10: - `packages/client`: `bun run generate`
++11:   - Result: PASS, exit 0.
++12:   - Output: `$ bun run script/build.ts`
++13:   - Notes: generated files are current after regeneration. `git diff --name-only` shows generated v2 SDK diffs under `packages/sdk/js/src/v2/gen/`.
++14: - `packages/opencode`: `bun test test/server/httpapi-directory.test.ts`
++15:   - Result: PASS, exit 0.
++16:   - Output: `2 pass`, `0 fail`, `7 expect() calls`, `Ran 2 tests across 1 file. [11.60s]`
++17: - `packages/opencode`: `bun typecheck`
++18:   - Result: PASS, exit 0.
++19:   - Output: `$ tsgo --noEmit`
++20: - `packages/client`: `bun typecheck`
++21:   - Result: PASS, exit 0.
++22:   - Output: `$ tsgo --noEmit`
++23: - `packages/tui`: `bun test test/context/project-switch.test.tsx test/component/dialog-project-list.test.ts test/component/dialog-project-add.test.ts`
++24:   - Result: PASS, exit 0.
++25:   - Output: `9 pass`, `0 fail`, `21 expect() calls`, `Ran 9 tests across 3 files. [1.59s]`
++26: - `packages/tui`: `bun typecheck`
++27:   - Result: PASS, exit 0.
++28:   - Output: `$ tsgo --noEmit`
++29: 
++30: ## Fixes Made
++31: 
++32: - No source or behavior fixes were required by verification.
++33: - Updated Task 5's row in `docs/superpowers/plans/2026-07-08-tui-project-management/index.md` from `pending` to `done`, per the task brief's status-source instruction.
++34: 
++35: ## Spec Coverage Checklist
++36: 
++37: - `/projects` opens project list: implemented by `project.list` command with `slashName: "projects"` in `packages/tui/src/app.tsx`.
++38: - project list uses backend `/project`: implemented by `sdk.client.project.list()` in `DialogProjectList`; generated SDK maps this to `/project`.
++39: - project list searches display name and directory: implemented by `projectSearchText()` and covered by `dialog-project-list.test.ts`.
++40: - project list shows display name and directory: implemented by `createProjectListOptions()` title/details and covered by `dialog-project-list.test.ts`.
++41: - project list has no deletion action: implemented; `DialogProjectList` only exposes the open-project action and no delete action.
++42: - `ctrl+o` opens add-project from project list: implemented via `dialog.project.open` action and default keybind in `packages/tui/src/config/keybind.ts`.
++43: - add-project has no direct command: implemented; `DialogProjectAdd` is only created from the project list command flow in `app.tsx`.
++44: - `esc` from add-project returns project list: implemented by `DialogProjectAdd` calling `props.onBack()` on escape.
++45: - add-project starts at current project parent directory: implemented by `projectParentDirectory()` and covered by `dialog-project-add.test.ts`.
++46: - selector lists direct child directories: implemented by server `directory.list` returning only entries with `entry.type === "directory"`; covered by `httpapi-directory.test.ts`.
++47: - search debounce is `10ms`: implemented by `setTimeout(..., 10)` in `DialogProjectAdd`.
++48: - space copies selected directory into input and loads children: implemented by `chooseSelected()` calling `load(item.absolute)` on space.
++49: - enter confirms input value: implemented by `confirm()` calling `switchProject(normalizeProjectInput(input()))`; it does not read the selected item.
++50: - confirmed project soft re-enters target home: implemented by `useProjectSwitch()` setting SDK directory, clearing workspace, navigating home, clearing dialog, and bootstrapping; covered by `project-switch.test.tsx`.
++51: - directory browse API does not call `InstanceStore.load` or `Project.fromDirectory`: implemented by the standalone `directory` HttpApi group using `Authorization` middleware only and handler using `FSUtil`; covered by `httpapi-directory.test.ts` verifying browsed directories are not added to `/project`.
++52: - Windows paths are preserved through TUI input and validated by server-side path resolution: implemented by Windows separator normalization in TUI input helpers and `fs.resolve(ctx.query.path)` in the server handler; covered by `dialog-project-add.test.ts` Windows path cases and server directory API tests.
++53: 
++54: Result: every checklist line is implemented by code or covered by a focused test.
++55: 
++56: ## Files Changed
++57: 
++58: - `.superpowers/sdd/task-5-report.md`
++59: - `docs/superpowers/plans/2026-07-08-tui-project-management/index.md`
++60: - Existing Task 1-4 working-tree changes remain present, including directory HttpApi files/tests, TUI project switch/list/add files/tests, and generated SDK files.
++61: 
++62: ## Concerns
++63: 
++64: - `index.md` still lists Tasks 1-4 as `pending` even though the user context says they are implemented and reviewed clean. I updated only Task 5 because that is the current task's explicit status-source instruction.
++65: - `git diff --name-only` reports content diffs for `packages/sdk/js/src/v2/gen/sdk.gen.ts` and `packages/sdk/js/src/v2/gen/types.gen.ts`; `git status --short` also lists many generated SDK files with line-ending warnings but no content diff from `git diff --name-only`.
+

@@ -86,8 +86,18 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/config/providers") return json({ providers: {}, default: {} })
     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })
-    if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
+    if (url.pathname === "/path")
+      return json({ home: "", state: "", config: "", worktree, directory: url.searchParams.get("directory") ?? directory })
     if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
+    if (url.pathname === "/directory") {
+      const target = url.searchParams.get("path") ?? directory
+      return json([
+        { name: "subA", absolute: `${target}/subA` },
+        { name: "subB", absolute: `${target}/subB` },
+      ])
+    }
+    if (url.pathname === "/project")
+      return json([{ id: "proj_test", worktree, name: "opencode", time: { created: 0, updated: 0 }, sandboxes: [] }])
     if (
       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
         url.pathname,
@@ -97,7 +107,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         location: { directory, project: { id: "proj_test", directory: worktree } },
         data: [],
       })
-    if (url.pathname === "/project/current") return json({ id: "proj_test" })
+    if (url.pathname === "/project/current")
+      return json({ id: "proj_test", worktree: url.searchParams.get("directory") ?? directory })
     if (url.pathname === "/api/reference")
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
