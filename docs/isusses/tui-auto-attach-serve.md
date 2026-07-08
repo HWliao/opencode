@@ -23,3 +23,7 @@ The TUI currently starts its own worker-backed runtime by default and only attac
 ## Investigation
 
 Not started. This issue is only recorded for follow-up design and investigation.
+
+## 最后决策
+
+不直接改变opencode命令本身, 改为opencode attache 命令增减默认值处理, url 默认 http://127.0.0.1:4096, --dir 默认为opencode attache命令运行的目录
