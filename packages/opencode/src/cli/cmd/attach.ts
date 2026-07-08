@@ -4,19 +4,38 @@ import { errorMessage } from "@opencode-ai/tui/util/error"
 import { validateSession } from "../tui/validate-session"
 import { ServerAuth } from "@/server/auth"
 
+export const DEFAULT_ATTACH_URL = "http://127.0.0.1:4096"
+
+export function resolveAttachTarget(input: { url?: string; dir?: string }) {
+  const directory = (() => {
+    if (!input.dir) return process.cwd()
+    try {
+      process.chdir(input.dir)
+      return process.cwd()
+    } catch {
+      // If the directory doesn't exist locally (remote attach), pass it through.
+      return input.dir
+    }
+  })()
+
+  return {
+    url: input.url ?? DEFAULT_ATTACH_URL,
+    directory,
+  }
+}
+
 export const AttachCommand = cmd({
-  command: "attach <url>",
+  command: "attach [url]",
   describe: "attach to a running opencode server",
   builder: (yargs) =>
     yargs
       .positional("url", {
         type: "string",
-        describe: "http://localhost:4096",
-        demandOption: true,
+        describe: `server URL (defaults to ${DEFAULT_ATTACH_URL})`,
       })
       .option("dir", {
         type: "string",
-        description: "directory to run in",
+        description: "directory to run in (defaults to current directory)",
       })
       .option("continue", {
         alias: ["c"],
@@ -67,22 +86,13 @@ export const AttachCommand = cmd({
     }
     const noReplay = args.replay === false || args.noReplay === true
 
-    const directory = (() => {
-      if (!args.dir) return undefined
-      try {
-        process.chdir(args.dir)
-        return process.cwd()
-      } catch {
-        // If the directory doesn't exist locally (remote attach), pass it through.
-        return args.dir
-      }
-    })()
+    const target = resolveAttachTarget({ url: args.url, dir: args.dir })
 
     if (args.mini) {
       const { runMini } = await import("./run")
       await runMini({
-        attach: args.url,
-        directory,
+        attach: target.url,
+        directory: target.directory,
         password: args.password,
         username: args.username,
         continue: args.continue,
@@ -116,9 +126,9 @@ export const AttachCommand = cmd({
 
     try {
       await validateSession({
-        url: args.url,
+        url: target.url,
         sessionID: args.session,
-        directory,
+        directory: target.directory,
         headers,
       })
     } catch (error) {
@@ -132,7 +142,7 @@ export const AttachCommand = cmd({
     const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
     await Effect.runPromise(
       run({
-        url: args.url,
+        url: target.url,
         config,
         pluginHost: createLegacyTuiPluginHost(),
         args: {
@@ -140,7 +150,7 @@ export const AttachCommand = cmd({
           sessionID: args.session,
           fork: args.fork,
         },
-        directory,
+        directory: target.directory,
         headers,
       }),
     )
