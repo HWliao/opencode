@@ -390,12 +390,14 @@ export class RunFooter implements FooterApi {
   public event(next: FooterEvent): void {
     if (next.type === "turn.duration") {
       const current = this.currentModel()
+      const variant = this.currentVariant()
       this.flush()
       this.flushing = this.flushing
         .then(() =>
           this.scrollback.writeTurnSummary({
             agent: this.options.agentLabel,
             model: current ? modelInfo(this.providers(), current).model : this.state().model,
+            ...(variant && variant !== "default" ? { variant } : {}),
             duration: next.duration,
           }),
         )

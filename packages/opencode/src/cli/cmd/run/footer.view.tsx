@@ -160,7 +160,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const tabs = createMemo(() => subagent().tabs)
   const activeTabs = createMemo(() => tabs().filter((item) => item.status === "running"))
   const selectedTab = createMemo(() => tabs().find((item) => item.sessionID === selected()))
-  const selectedModel = createMemo(() => selectedTab()?.model)
   const selectedIndex = createMemo(() => {
     const sessionID = selected()
     if (!sessionID) {
@@ -425,15 +424,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     return usage()
   })
   const modelStatus = createMemo(() => {
-    const child = selectedModel()
-    if (child) {
-      return {
-        model: modelInfo(props.providers(), child).model,
-        variant: child.variant === "default" ? undefined : child.variant,
-        provider: undefined,
-      }
-    }
-
     const current = props.currentModel()
     if (!prompt() || shell() || !current) {
       return

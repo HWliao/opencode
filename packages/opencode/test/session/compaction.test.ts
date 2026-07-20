@@ -580,6 +580,37 @@ describe("session.compaction.create", () => {
     ),
   )
 
+  it.live(
+    "inherits the current session variant when compact input omits it",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+
+        const info = yield* ssn.create({
+          model: {
+            id: ref.modelID,
+            providerID: ref.providerID,
+            variant: "xhigh",
+          },
+        })
+
+        yield* compact.create({
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        const msgs = yield* ssn.messages({ sessionID: info.id })
+        expect(msgs[0].info).toMatchObject({
+          role: "user",
+          model: { variant: "xhigh" },
+        })
+      }),
+    ),
+  )
+
   it.live.skip(
     "projects a compaction message to v2 (v2 projector disabled)",
     provideTmpdirInstance(() =>

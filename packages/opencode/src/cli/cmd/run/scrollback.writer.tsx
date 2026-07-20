@@ -333,7 +333,8 @@ export function spacerWriter(): ScrollbackWriter {
   })
 }
 
-export function turnSummaryWriter(input: { agent: string; model: string; duration: string; theme: RunTheme }) {
+export function turnSummaryWriter(input: { agent: string; model: string; variant?: string; duration: string; theme: RunTheme }) {
+  const metadata = [input.model, input.variant, input.duration].filter(Boolean).join(" · ")
   return createScrollbackWriter(
     () => (
       <box width="100%" height={1}>
@@ -342,7 +343,7 @@ export function turnSummaryWriter(input: { agent: string; model: string; duratio
           <span style={{ fg: input.theme.block.text }}>{input.agent}</span>
           <span style={{ fg: input.theme.block.muted }}>
             {" "}
-            · {input.model} · {input.duration}
+            · {metadata}
           </span>
         </text>
       </box>

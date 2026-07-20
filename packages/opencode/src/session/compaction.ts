@@ -143,7 +143,7 @@ export interface Interface {
   readonly create: (input: {
     sessionID: SessionID
     agent: string
-    model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+    model: { providerID: ProviderV2.ID; modelID: ModelV2.ID; variant?: string }
     auto: boolean
     overflow?: boolean
   }) => Effect.Effect<void>
@@ -513,14 +513,26 @@ const layer = Layer.effect(
     const create = Effect.fn("SessionCompaction.create")(function* (input: {
       sessionID: SessionID
       agent: string
-      model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+      model: { providerID: ProviderV2.ID; modelID: ModelV2.ID; variant?: string }
       auto: boolean
       overflow?: boolean
     }) {
+      const info = yield* session
+        .get(input.sessionID)
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const sessionModel = info?.model
+      const variant =
+        input.model.variant ??
+        (sessionModel?.providerID === input.model.providerID && sessionModel.id === input.model.modelID
+          ? sessionModel.variant
+          : undefined)
       const msg = yield* session.updateMessage({
         id: MessageID.ascending(),
         role: "user",
-        model: input.model,
+        model: {
+          ...input.model,
+          ...(variant === undefined ? {} : { variant }),
+        },
         sessionID: input.sessionID,
         agent: input.agent,
         time: { created: Date.now() },

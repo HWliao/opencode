@@ -128,6 +128,23 @@ test("turn summary starts at the left edge", async () => {
   }
 })
 
+test("turn summary includes non-default model variant", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.writeTurnSummary({ agent: "General", model: "GPT-5.5", variant: "xhigh", duration: "2m 10s" })
+
+    const commits = claim(out.renderer)
+    try {
+      expect(renderRows(commits.at(-1)!)[0]).toBe("▣ General · GPT-5.5 · xhigh · 2m 10s")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
 test("theme swaps restyle active reasoning without resetting the stream", async () => {
   const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } })
   const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" } })

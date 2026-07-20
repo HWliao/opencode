@@ -16,9 +16,9 @@ import {
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "@/cli/cmd/run/footer.command"
-import { RunFooterSubagentBody } from "@/cli/cmd/run/footer.subagent"
 import { RunFooterView } from "@/cli/cmd/run/footer.view"
 import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
+import { RunFooterSubagentBody } from "@/cli/cmd/run/footer.subagent"
 import { RUN_THEME_FALLBACK, type RunTheme } from "@/cli/cmd/run/theme"
 import type {
   FooterState,
