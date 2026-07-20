@@ -86,6 +86,7 @@ export function sameSubagentTab(a: FooterSubagentTab | undefined, b: FooterSubag
     a.background === b.background &&
     a.title === b.title &&
     a.toolCalls === b.toolCalls &&
+    sameModel(a.model, b.model) &&
     a.lastUpdatedAt === b.lastUpdatedAt
   )
 }
@@ -292,6 +293,34 @@ function metadata(part: ToolPart, key: string) {
   return ("metadata" in part.state ? part.state.metadata?.[key] : undefined) ?? part.metadata?.[key]
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined
+  }
+
+  return value as Record<string, unknown>
+}
+
+function metadataModel(part: ToolPart): FooterSubagentTab["model"] | undefined {
+  const value = record(metadata(part, "model"))
+  const providerID = text(value?.providerID)
+  const modelID = text(value?.modelID)
+  if (!providerID || !modelID) {
+    return undefined
+  }
+
+  const variant = text(value?.variant)
+  return {
+    providerID,
+    modelID,
+    ...(variant && variant !== "default" ? { variant } : {}),
+  }
+}
+
+function sameModel(a: FooterSubagentTab["model"], b: FooterSubagentTab["model"]) {
+  return a?.providerID === b?.providerID && a?.modelID === b?.modelID && a?.variant === b?.variant
+}
+
 function taskStatus(part: ToolPart): FooterSubagentTab["status"] {
   if (part.state.status === "completed") {
     return "completed"
@@ -321,6 +350,7 @@ function taskTab(part: ToolPart, sessionID: string): FooterSubagentTab {
     status: taskStatus(part),
     background: metadata(part, "background") === true,
     title: stateTitle(part),
+    model: metadataModel(part),
     toolCalls: num(metadata(part, "toolcalls")) ?? num(metadata(part, "toolCalls")) ?? num(metadata(part, "calls")),
     lastUpdatedAt: stateUpdatedAt(part),
   }

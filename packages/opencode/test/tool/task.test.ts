@@ -15,6 +15,7 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { Provider } from "@/provider/provider"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
@@ -34,25 +35,69 @@ const ref = {
   modelID: ModelV2.ID.make("test-model"),
 }
 
+const alternate = {
+  providerID: ProviderV2.ID.make("other"),
+  modelID: ModelV2.ID.make("other-model"),
+}
+
+const alternateModel: Provider.Model = {
+  id: alternate.modelID,
+  providerID: alternate.providerID,
+  api: { id: "test", url: "", npm: "" },
+  name: "Other Model",
+  capabilities: {
+    temperature: true,
+    reasoning: true,
+    attachment: true,
+    toolcall: true,
+    input: { text: true, audio: false, image: false, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  },
+  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+  limit: { context: 0, output: 0 },
+  status: "active",
+  options: {},
+  headers: {},
+  release_date: "",
+  variants: { xhigh: {}, minimal: {} },
+}
+
+const testProvider = Layer.succeed(Provider.Service, {
+  list: () => Effect.succeed({}),
+  getProvider: () => Effect.die(new Error("not used")),
+  getModel: (providerID, modelID) =>
+    providerID === alternate.providerID && modelID === alternate.modelID
+      ? Effect.succeed(alternateModel)
+      : Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID })),
+  getLanguage: () => Effect.die(new Error("not used")),
+  closest: () => Effect.succeed(undefined),
+  getSmallModel: () => Effect.succeed(undefined),
+  defaultModel: () => Effect.succeed(ref),
+})
+
 const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  LayerNode.compile(
-    LayerNode.group([
-      Agent.node,
-      BackgroundJob.node,
-      EventV2Bridge.node,
-      Config.node,
-      CrossSpawnSpawner.node,
-      Session.node,
-      SessionProjector.node,
-      SessionRunState.node,
-      SessionStatus.node,
-      Truncate.node,
-      ToolRegistry.node,
-      Database.node,
-      RuntimeFlags.node,
-      Ripgrep.node,
-    ]),
-    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+  Layer.mergeAll(
+    LayerNode.compile(
+      LayerNode.group([
+        Agent.node,
+        BackgroundJob.node,
+        EventV2Bridge.node,
+        Config.node,
+        CrossSpawnSpawner.node,
+        Session.node,
+        SessionProjector.node,
+        SessionRunState.node,
+        SessionStatus.node,
+        Truncate.node,
+        ToolRegistry.node,
+        Database.node,
+        RuntimeFlags.node,
+        Ripgrep.node,
+      ]),
+      [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+    ),
+    testProvider,
   )
 
 const it = testEffect(layer())
@@ -66,7 +111,10 @@ function defer<T>() {
   return { promise, resolve }
 }
 
-const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
+const seed = Effect.fn("TaskToolTest.seed")(function* (
+  title = "Pinned",
+  input?: { assistantVariant?: string | null; sessionVariant?: string },
+) {
   const session = yield* Session.Service
   const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
@@ -89,10 +137,22 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     modelID: ref.modelID,
     providerID: ref.providerID,
-    variant: "xhigh",
+    ...(input?.assistantVariant === null ? {} : { variant: input?.assistantVariant ?? "xhigh" }),
     time: { created: Date.now() },
   }
   yield* session.updateMessage(assistant)
+  if (input?.sessionVariant) {
+    yield* session.setAgentModel({
+      sessionID: chat.id,
+      agent: "build",
+      model: {
+        id: ref.modelID,
+        providerID: ref.providerID,
+        variant: input.sessionVariant,
+      },
+      time: Date.now(),
+    })
+  }
   return { chat, assistant }
 })
 
@@ -466,6 +526,209 @@ describe("tool.task", () => {
         expect((yield* sessions.get(result.metadata.sessionId)).parentID).toBe(child.id)
       }),
     { config: { subagent_depth: 2 } },
+  )
+
+  it.instance("execute falls back to the parent session variant when the assistant variant is missing", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed("Pinned", { assistantVariant: null, sessionVariant: "xhigh" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.variant).toBe("xhigh")
+      expect(result.metadata.model).toEqual({
+        providerID: ref.providerID,
+        modelID: ref.modelID,
+        variant: "xhigh",
+      })
+    }),
+  )
+
+  it.instance("execute does not inherit the parent session variant when the parent model differs", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed("Pinned", { assistantVariant: null })
+      yield* sessions.setAgentModel({
+        sessionID: chat.id,
+        agent: "build",
+        model: {
+          id: alternate.modelID,
+          providerID: alternate.providerID,
+          variant: "xhigh",
+        },
+        time: Date.now(),
+      })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.variant).toBeUndefined()
+      expect(result.metadata.model).toEqual({
+        providerID: ref.providerID,
+        modelID: ref.modelID,
+      })
+    }),
+  )
+
+  it.instance("execute uses an explicit task model without a variant", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          model: "other/other-model",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.model).toEqual(alternate)
+      expect(seen?.variant).toBeUndefined()
+    }),
+  )
+
+  it.instance("execute uses an explicit task model variant", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          model: "other/other-model(xhigh)",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.model).toEqual(alternate)
+      expect(seen?.variant).toBe("xhigh")
+      expect(result.metadata.model).toEqual({
+        providerID: alternate.providerID,
+        modelID: alternate.modelID,
+        variant: "xhigh",
+      })
+    }),
+  )
+
+  it.instance("execute fails invalid explicit task models without fallback", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompts = 0
+      const promptOps: TaskPromptOps = {
+        ...stubOps(),
+        prompt: (input) =>
+          Effect.sync(() => {
+            prompts += 1
+            return reply(input, "unexpected")
+          }),
+      }
+
+      const exec = (model: string) =>
+        def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+              model,
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+      const empty = yield* exec("")
+      const malformed = yield* exec("other")
+      const unknownModel = yield* exec("other/missing")
+      const unknownVariant = yield* exec("other/other-model(unknown)")
+      const inheritedVariant = yield* exec("other/other-model(toString)")
+
+      expect(Exit.isFailure(empty)).toBe(true)
+      expect(Exit.isFailure(malformed)).toBe(true)
+      expect(Exit.isFailure(unknownModel)).toBe(true)
+      expect(Exit.isFailure(unknownVariant)).toBe(true)
+      expect(Exit.isFailure(inheritedVariant)).toBe(true)
+      expect(yield* sessions.children(chat.id)).toHaveLength(0)
+      expect(prompts).toBe(0)
+    }),
   )
 
   it.instance(

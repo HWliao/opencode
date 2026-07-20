@@ -6,6 +6,7 @@ import {
   bootstrapSubagentData,
   createSubagentData,
   reduceSubagentData,
+  sameSubagentTab,
   snapshotSubagentData,
 } from "@/cli/cmd/run/subagent-data"
 
@@ -49,7 +50,11 @@ function reduce(data: ReturnType<typeof createSubagentData>, event: unknown) {
   })
 }
 
-function taskMessage(sessionID: string, status: "running" | "completed" | "interrupted" = "completed"): SessionMessage {
+function taskMessage(
+  sessionID: string,
+  status: "running" | "completed" | "interrupted" = "completed",
+  metadata: Record<string, unknown> = {},
+): SessionMessage {
   if (status === "running") {
     return {
       parts: [
@@ -70,6 +75,7 @@ function taskMessage(sessionID: string, status: "running" | "completed" | "inter
             metadata: {
               sessionId: sessionID,
               toolcalls: 4,
+              ...metadata,
             },
             time: { start: 1 },
           },
@@ -99,6 +105,7 @@ function taskMessage(sessionID: string, status: "running" | "completed" | "inter
               sessionId: sessionID,
               toolcalls: 4,
               interrupted: true,
+              ...metadata,
             },
             time: { start: 1, end: 2 },
           },
@@ -127,6 +134,7 @@ function taskMessage(sessionID: string, status: "running" | "completed" | "inter
           metadata: {
             sessionId: sessionID,
             toolcalls: 4,
+            ...metadata,
           },
           time: { start: 1, end: 2 },
         },
@@ -260,6 +268,86 @@ describe("run subagent data", () => {
     })
     expect(snapshot.permissions.map((item) => item.id)).toEqual(["perm-1"])
     expect(snapshot.questions.map((item) => item.id)).toEqual(["question-1"])
+  })
+
+  test("captures subagent model metadata on tabs", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [
+        taskMessage("child-1", "completed", {
+          model: {
+            providerID: "test",
+            modelID: "test-model",
+            variant: "xhigh",
+          },
+        }),
+      ],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    expect(snapshotSubagentData(data).tabs).toEqual([
+      expect.objectContaining({
+        sessionID: "child-1",
+        model: {
+          providerID: "test",
+          modelID: "test-model",
+          variant: "xhigh",
+        },
+      }),
+    ])
+  })
+
+  test("omits default subagent variants from tab metadata", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [
+        taskMessage("child-1", "completed", {
+          model: {
+            providerID: "test",
+            modelID: "test-model",
+            variant: "default",
+          },
+        }),
+      ],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    expect(snapshotSubagentData(data).tabs).toEqual([
+      expect.objectContaining({
+        sessionID: "child-1",
+        model: {
+          providerID: "test",
+          modelID: "test-model",
+        },
+      }),
+    ])
+  })
+
+  test("compares subagent tab model metadata", () => {
+    const base = {
+      sessionID: "child-1",
+      partID: "part-1",
+      callID: "call-1",
+      label: "Explore",
+      description: "Scan reducer paths",
+      status: "running" as const,
+      lastUpdatedAt: 1,
+    }
+
+    expect(
+      sameSubagentTab(
+        { ...base, model: { providerID: "test", modelID: "test-model", variant: "xhigh" } },
+        { ...base, model: { providerID: "test", modelID: "test-model", variant: "minimal" } },
+      ),
+    ).toBe(false)
   })
 
   test("marks interrupted task tabs as cancelled during bootstrap", () => {

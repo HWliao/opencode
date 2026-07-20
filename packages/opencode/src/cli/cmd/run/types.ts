@@ -194,6 +194,11 @@ export type FooterSubagentTab = {
   status: "running" | "completed" | "cancelled" | "error"
   background?: boolean
   title?: string
+  model?: {
+    providerID: string
+    modelID: string
+    variant?: string
+  }
   toolCalls?: number
   lastUpdatedAt: number
 }

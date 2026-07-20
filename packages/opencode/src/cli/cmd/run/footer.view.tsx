@@ -160,6 +160,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const tabs = createMemo(() => subagent().tabs)
   const activeTabs = createMemo(() => tabs().filter((item) => item.status === "running"))
   const selectedTab = createMemo(() => tabs().find((item) => item.sessionID === selected()))
+  const selectedModel = createMemo(() => selectedTab()?.model)
   const selectedIndex = createMemo(() => {
     const sessionID = selected()
     if (!sessionID) {
@@ -424,6 +425,15 @@ export function RunFooterView(props: RunFooterViewProps) {
     return usage()
   })
   const modelStatus = createMemo(() => {
+    const child = selectedModel()
+    if (child) {
+      return {
+        model: modelInfo(props.providers(), child).model,
+        variant: child.variant === "default" ? undefined : child.variant,
+        provider: undefined,
+      }
+    }
+
     const current = props.currentModel()
     if (!prompt() || shell() || !current) {
       return
@@ -488,6 +498,106 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
   })
   const sectionSeparator = () => <span style={{ fg: theme().muted }}>· </span>
+  const statusLine = () => (
+    <Show when={!panel() && !menu()}>
+      <box
+        width="100%"
+        height={1}
+        flexDirection="row"
+        gap={0}
+        flexShrink={0}
+        backgroundColor={statuslineBackground()}
+      >
+        <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
+          <text wrapMode="none" truncate>
+            <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
+          </text>
+        </box>
+
+        <box
+          flexDirection="row"
+          gap={1}
+          flexGrow={1}
+          flexShrink={1}
+          minWidth={12}
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor="transparent"
+        >
+          <Show when={busy() && !exiting()}>
+            <box flexShrink={0}>
+              <spinner color={spin().color} frames={spin().frames} interval={40} />
+            </box>
+          </Show>
+
+          <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+            <Show when={busy() && !exiting()} fallback={statusText()}>
+              <Show when={interruptLabel()}>
+                {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
+              </Show>
+              {statusText()}
+            </Show>
+          </text>
+        </box>
+
+        <Show when={activityMeta().length > 0}>
+          <box paddingRight={1} backgroundColor="transparent" flexShrink={1}>
+            <text fg={theme().muted} wrapMode="none" truncate>
+              {activityMeta()}
+            </text>
+          </box>
+        </Show>
+
+        <Show when={responsive().statusline.showModel && modelStatus()}>
+          {(info) => (
+            <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
+              <text fg={theme().text} wrapMode="none">
+                {info().model}
+                <Show when={info().provider}>
+                  {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
+                </Show>
+                <Show when={info().variant}>
+                  {(variant) => (
+                    <>
+                      <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>
+                    </>
+                  )}
+                </Show>
+              </text>
+            </box>
+          )}
+        </Show>
+
+        <For each={contextHints()}>
+          {(hint, index) => (
+            <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={24}>
+              <text fg={theme().text} wrapMode="none" truncate>
+                <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
+                  {sectionSeparator()}
+                </Show>
+                <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
+                <span style={{ fg: theme().muted }}>{hint.label}</span>
+              </text>
+            </box>
+          )}
+        </For>
+
+        <Show when={commandHint()}>
+          {(hint) => (
+            <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={18}>
+              <text fg={theme().text} wrapMode="none" truncate>
+                <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
+                  {sectionSeparator()}
+                </Show>
+                <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
+                <span style={{ fg: theme().muted }}>{hint().label}</span>
+              </text>
+            </box>
+          )}
+        </Show>
+      </box>
+    </Show>
+  )
 
   createEffect(() => {
     props.onRequestExit?.(composer.requestExit)
@@ -814,130 +924,36 @@ export function RunFooterView(props: RunFooterViewProps) {
               />
             </Show>
 
-            <Show when={!panel() && !menu()}>
-              <box
-                width="100%"
-                height={1}
-                flexDirection="row"
-                gap={0}
-                flexShrink={0}
-                backgroundColor={statuslineBackground()}
-              >
-                <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
-                  <text wrapMode="none" truncate>
-                    <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
-                  </text>
-                </box>
-
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  flexGrow={1}
-                  flexShrink={1}
-                  minWidth={12}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor="transparent"
-                >
-                  <Show when={busy() && !exiting()}>
-                    <box flexShrink={0}>
-                      <spinner color={spin().color} frames={spin().frames} interval={40} />
-                    </box>
-                  </Show>
-
-                  <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                    <Show when={busy() && !exiting()} fallback={statusText()}>
-                      <Show when={interruptLabel()}>
-                        {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
-                      </Show>
-                      {statusText()}
-                    </Show>
-                  </text>
-                </box>
-
-                <Show when={activityMeta().length > 0}>
-                  <box paddingRight={1} backgroundColor="transparent" flexShrink={1}>
-                    <text fg={theme().muted} wrapMode="none" truncate>
-                      {activityMeta()}
-                    </text>
-                  </box>
-                </Show>
-
-                <Show when={responsive().statusline.showModel && modelStatus()}>
-                  {(info) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().text} wrapMode="none">
-                        {info().model}
-                        <Show when={info().provider}>
-                          {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
-                        </Show>
-                        <Show when={info().variant}>
-                          {(variant) => (
-                            <>
-                              <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>
-                            </>
-                          )}
-                        </Show>
-                      </text>
-                    </box>
-                  )}
-                </Show>
-
-                <For each={contextHints()}>
-                  {(hint, index) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={24}>
-                      <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
-                          {sectionSeparator()}
-                        </Show>
-                        <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
-                        <span style={{ fg: theme().muted }}>{hint.label}</span>
-                      </text>
-                    </box>
-                  )}
-                </For>
-
-                <Show when={commandHint()}>
-                  {(hint) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={18}>
-                      <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
-                          {sectionSeparator()}
-                        </Show>
-                        <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
-                        <span style={{ fg: theme().muted }}>{hint().label}</span>
-                      </text>
-                    </box>
-                  )}
-                </Show>
-              </box>
-            </Show>
+            {statusLine()}
           </box>
         }
       >
-        <box
-          width="100%"
-          flexGrow={1}
-          flexShrink={1}
-          border={["left"]}
-          borderColor={theme().highlight}
-          customBorderChars={{
-            ...EMPTY_BORDER,
-            vertical: "┃",
-          }}
-        >
-          <RunFooterSubagentBody
-            active={inspecting}
-            theme={runTheme}
-            tab={selectedTab}
-            index={selectedIndex}
-            total={() => tabs().length}
-            detail={detail}
-            width={width}
-            diffStyle={props.diffStyle}
-            onCycle={cycleTab}
-            onClose={closeTab}
-          />
+        <box width="100%" flexGrow={1} flexShrink={1} flexDirection="column" gap={0}>
+          <box
+            width="100%"
+            flexGrow={1}
+            flexShrink={1}
+            border={["left"]}
+            borderColor={theme().highlight}
+            customBorderChars={{
+              ...EMPTY_BORDER,
+              vertical: "┃",
+            }}
+          >
+            <RunFooterSubagentBody
+              active={inspecting}
+              theme={runTheme}
+              tab={selectedTab}
+              index={selectedIndex}
+              total={() => tabs().length}
+              detail={detail}
+              width={width}
+              diffStyle={props.diffStyle}
+              onCycle={cycleTab}
+              onClose={closeTab}
+            />
+          </box>
+          {statusLine()}
         </box>
       </Show>
     </box>

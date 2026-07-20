@@ -1,5 +1,7 @@
 # Task Subagents Lose Inherited Model Variant
 
+Status: resolved
+
 ## Summary
 
 When the `task` tool starts a subagent without an explicitly configured model or variant, the subagent inherits the parent session model but may fail to inherit the parent session variant.
@@ -56,3 +58,22 @@ Subagents may silently run with default model behavior despite the parent sessio
 2. Execute the `task` tool with a subagent that has no custom model.
 3. Assert `promptOps.prompt` receives `variant: "xhigh"`.
 4. Keep existing coverage showing assistant-message variants are still inherited.
+
+## Resolution
+
+Resolved on 2026-06-30.
+
+Implemented changes:
+
+1. `TaskTool` now computes the child task model and variant explicitly.
+2. When no explicit task model and no subagent-configured model are present, the child task inherits the parent assistant message variant first, then falls back to the parent session model variant when the parent session model matches the inherited parent message model.
+3. `"default"` variants are normalized away so default behavior remains implicit.
+4. The `task` tool now accepts an optional atomic `model` override in `providerID/modelID` or `providerID/modelID(variant)` format. Invalid explicit values fail immediately and do not fall back.
+5. Task metadata now records the effective child model and non-default variant for TUI consumption.
+6. The TUI subagent statusline reuses the existing model display and appends the selected subagent's non-default variant beside the model name.
+
+Verification:
+
+1. `bun test test/tool/task.test.ts test/cli/run/subagent-data.test.ts` passed from `packages/opencode`.
+2. `bun typecheck` passed from `packages/opencode`.
+3. Final code review approved the implementation.

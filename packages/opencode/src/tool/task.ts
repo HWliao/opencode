@@ -14,6 +14,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { Provider } from "@/provider/provider"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -44,6 +45,10 @@ const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  model: Schema.optional(Schema.String).annotate({
+    description:
+      "Optional model override for this task, formatted as providerID/modelID or providerID/modelID(variant). If set, provider, model, and variant all come from this value.",
+  }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
@@ -78,6 +83,56 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+function normalizeVariant(variant: string | undefined) {
+  if (!variant || variant === "default") return undefined
+  return variant
+}
+
+function parseExplicitModel(input: string) {
+  const fail = (reason: string) => new Error(`Invalid task model "${input}": ${reason}`)
+  const open = input.lastIndexOf("(")
+  const hasOpen = open !== -1
+  const hasClose = input.endsWith(")")
+  if ((input.includes("(") || input.includes(")")) && (!hasOpen || !hasClose || open === input.length - 2)) {
+    return { error: fail("expected providerID/modelID or providerID/modelID(variant)") }
+  }
+
+  const body = hasOpen ? input.slice(0, open) : input
+  const slash = body.indexOf("/")
+  if (slash <= 0 || slash === body.length - 1) {
+    return { error: fail("expected providerID/modelID or providerID/modelID(variant)") }
+  }
+
+  const variant = hasOpen ? input.slice(open + 1, -1).trim() : undefined
+  if (variant === "") {
+    return { error: fail("variant cannot be empty") }
+  }
+
+  return {
+    model: Provider.parseModel(body),
+    variant: normalizeVariant(variant),
+  }
+}
+
+const validateExplicitModel = Effect.fn("TaskTool.validateExplicitModel")(function* (
+  provider: Provider.Interface,
+  input: string,
+) {
+  const parsed = parseExplicitModel(input)
+  if ("error" in parsed) return yield* Effect.fail(parsed.error)
+
+  const full = yield* provider.getModel(parsed.model.providerID, parsed.model.modelID).pipe(
+    Effect.catchIf(Provider.ModelNotFoundError.isInstance, () =>
+      Effect.fail(new Error(`Invalid task model "${input}": model not found`)),
+    ),
+  )
+  if (parsed.variant && !Object.hasOwn(full.variants ?? {}, parsed.variant)) {
+    return yield* Effect.fail(new Error(`Invalid task model "${input}": variant not found`))
+  }
+
+  return parsed
+})
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -88,6 +143,7 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const provider = yield* Provider.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -132,6 +188,7 @@ export const TaskTool = Tool.define(
       if (!next) {
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
+      const explicit = params.model !== undefined ? yield* validateExplicitModel(provider, params.model) : undefined
 
       const session = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
@@ -176,16 +233,26 @@ export const TaskTool = Tool.define(
         Effect.orDie,
       )
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
-
-      const model = next.model ?? {
+      const inheritedModel = {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
+      }
+      const model = explicit?.model ?? next.model ?? inheritedModel
+      const parentVariant =
+        normalizeVariant(msg.info.variant) ??
+        (parent.model?.providerID === inheritedModel.providerID && parent.model.id === inheritedModel.modelID
+          ? normalizeVariant(parent.model.variant)
+          : undefined)
+      const childVariant = explicit ? explicit.variant : next.model ? normalizeVariant(next.variant) : parentVariant
+      const metadataModel = {
+        modelID: model.modelID,
+        providerID: model.providerID,
+        ...(childVariant ? { variant: childVariant } : {}),
       }
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
-        model,
+        model: metadataModel,
         ...(runInBackground ? { background: true } : {}),
       }
 
@@ -206,7 +273,7 @@ export const TaskTool = Tool.define(
             modelID: model.modelID,
             providerID: model.providerID,
           },
-          variant: next.model ? undefined : variant,
+          variant: childVariant,
           agent: next.name,
           parts,
         })
@@ -222,7 +289,7 @@ export const TaskTool = Tool.define(
           .prompt({
             sessionID: ctx.sessionID,
             agent: currentParent.agent ?? ctx.agent,
-            variant,
+            variant: parentVariant,
             parts: [
               {
                 type: "text",
