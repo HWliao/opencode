@@ -4,7 +4,11 @@ import { Installation } from "@/installation"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { TuiEvent } from "@/server/tui-event"
-import { InstallationLocalUpgradeMessage, InstallationVersion } from "@opencode-ai/core/installation/version"
+import {
+  InstallationLocalUpgradeMessage,
+  InstallationVersion,
+  normalizeInstallationVersion,
+} from "@opencode-ai/core/installation/version"
 
 type UpgradeCheckInput = {
   currentVersion?: string
@@ -17,14 +21,21 @@ type UpgradeCheckInput = {
 }
 
 export async function upgrade(input: UpgradeCheckInput = {}) {
-  const config = await (input.getConfig ?? (() => AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))))()
-  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
+	const config = await (input.getConfig ?? (() => AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))))()
+	if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
 
-  const emit = input.emit ?? ((eventName: "event", event: GlobalEvent) => GlobalBus.emit(eventName, event))
-  if ((input.isLocal ?? Installation.isLocal)()) {
-    emit("event", {
-      directory: "global",
-      payload: {
+	const emit = input.emit ?? ((eventName: "event", event: GlobalEvent) => GlobalBus.emit(eventName, event))
+	const method = await (input.method ?? Installation.method)()
+	const latest = await (input.latest ?? Installation.latest)(method).catch(() => {})
+	if (!latest) return
+
+	const currentVersion = normalizeInstallationVersion(input.currentVersion ?? InstallationVersion)
+	const local = (input.isLocal ?? Installation.isLocal)()
+	if (local && currentVersion === latest) return
+	if (local) {
+		emit("event", {
+			directory: "global",
+			payload: {
         type: TuiEvent.ToastShow.type,
         properties: {
           title: "Local build",
@@ -33,27 +44,23 @@ export async function upgrade(input: UpgradeCheckInput = {}) {
           duration: 10000,
         },
       },
-    })
-    return
-  }
+		})
+		return
+	}
 
-  const method = await (input.method ?? Installation.method)()
-  const latest = await (input.latest ?? Installation.latest)(method).catch(() => {})
-  if (!latest) return
-
-  if (Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) {
-    emit("event", {
+	if (Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) {
+		emit("event", {
       directory: "global",
       payload: {
         type: Installation.Event.UpdateAvailable.type,
         properties: { version: latest },
       },
     })
-    return
-  }
+		return
+	}
 
-  const currentVersion = input.currentVersion ?? InstallationVersion
-  if (currentVersion === latest) return
+	if (!currentVersion) return
+	if (currentVersion === latest) return
 
   const kind = Installation.getReleaseType(currentVersion, latest)
 

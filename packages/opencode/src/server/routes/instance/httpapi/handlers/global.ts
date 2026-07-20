@@ -4,7 +4,11 @@ import { EffectBridge } from "@/effect/bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
-import { InstallationLocalUpgradeMessage, InstallationVersion } from "@opencode-ai/core/installation/version"
+import {
+  InstallationLocalUpgradeMessage,
+  InstallationVersion,
+  normalizeInstallationVersion,
+} from "@opencode-ai/core/installation/version"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -94,22 +98,37 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return true
     })
 
-    const upgrade = Effect.fn("GlobalHttpApi.upgrade")(function* (ctx: { payload: typeof GlobalUpgradeInput.Type }) {
-      if (Installation.isLocal()) {
-        return {
-          status: 400,
-          body: { success: false as const, error: InstallationLocalUpgradeMessage },
-        }
-      }
-      const method = yield* installation.method()
-      if (method === "unknown") {
-        return {
-          status: 400,
-          body: { success: false as const, error: "Unknown installation method" },
-        }
-      }
-      const target = ctx.payload.target || (yield* installation.latest(method))
-      const result = yield* installation.upgrade(method, target).pipe(
+		const upgrade = Effect.fn("GlobalHttpApi.upgrade")(function* (ctx: { payload: typeof GlobalUpgradeInput.Type }) {
+			const method = yield* installation.method()
+			const local = Installation.isLocal()
+			if (method === "unknown" && !local) {
+				return {
+					status: 400,
+					body: { success: false as const, error: "Unknown installation method" },
+				}
+			}
+			const rawTarget = ctx.payload.target || (yield* installation.latest(method))
+			const target = normalizeInstallationVersion(rawTarget) ?? rawTarget.replace(/^v/, "")
+			const currentVersion = normalizeInstallationVersion(InstallationVersion) ?? InstallationVersion.replace(/^v/, "")
+			if (currentVersion === target) {
+				return {
+					status: 200,
+					body: { success: true as const, version: target },
+				}
+			}
+			if (local) {
+				return {
+					status: 400,
+					body: { success: false as const, error: InstallationLocalUpgradeMessage },
+				}
+			}
+			if (method === "unknown") {
+				return {
+					status: 400,
+					body: { success: false as const, error: "Unknown installation method" },
+				}
+			}
+			const result = yield* installation.upgrade(method, target).pipe(
         Effect.as({ status: 200, body: { success: true as const, version: target } }),
         Effect.catch((err) =>
           Effect.succeed({

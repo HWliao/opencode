@@ -2,7 +2,11 @@ import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
-import { InstallationLocalUpgradeMessage, InstallationVersion } from "@opencode-ai/core/installation/version"
+import {
+  InstallationLocalUpgradeMessage,
+  InstallationVersion,
+  normalizeInstallationVersion,
+} from "@opencode-ai/core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -22,19 +26,31 @@ export const UpgradeCommand = {
   },
   handler: async (args: { target?: string; method?: string }) => {
     UI.empty()
-    UI.println(UI.logo("  "))
-    UI.empty()
-    prompts.intro("Upgrade")
-    if (Installation.isLocal()) {
-      prompts.log.warn(InstallationLocalUpgradeMessage)
-      prompts.outro("Done")
-      return
-    }
-    const detectedMethod = await Installation.method()
-    const method = (args.method as Installation.Method) ?? detectedMethod
-    if (method === "unknown") {
-      prompts.log.error(`opencode is installed to ${process.execPath} and may be managed by a package manager`)
-      const install = await prompts.select({
+		UI.println(UI.logo("  "))
+		UI.empty()
+		prompts.intro("Upgrade")
+		const detectedMethod = await Installation.method()
+		const method = (args.method as Installation.Method) ?? detectedMethod
+		const target = args.target
+			? (normalizeInstallationVersion(args.target) ?? args.target.replace(/^v/, ""))
+			: await Installation.latest(method)
+		const currentVersion = normalizeInstallationVersion(InstallationVersion) ?? InstallationVersion.replace(/^v/, "")
+
+		if (currentVersion === target) {
+			prompts.log.warn(`opencode upgrade skipped: ${target} is already installed`)
+			prompts.outro("Done")
+			return
+		}
+
+		if (Installation.isLocal()) {
+			prompts.log.warn(InstallationLocalUpgradeMessage)
+			prompts.outro("Done")
+			return
+		}
+
+		if (method === "unknown") {
+			prompts.log.error(`opencode is installed to ${process.execPath} and may be managed by a package manager`)
+			const install = await prompts.select({
         message: "Install anyways?",
         options: [
           { label: "Yes", value: true },
@@ -45,18 +61,11 @@ export const UpgradeCommand = {
       if (!install) {
         prompts.outro("Done")
         return
-      }
-    }
-    prompts.log.info("Using method: " + method)
-    const target = args.target ? args.target.replace(/^v/, "") : await Installation.latest()
+			}
+		}
+		prompts.log.info("Using method: " + method)
 
-    if (InstallationVersion === target) {
-      prompts.log.warn(`opencode upgrade skipped: ${target} is already installed`)
-      prompts.outro("Done")
-      return
-    }
-
-    prompts.log.info(`From ${InstallationVersion} → ${target}`)
+		prompts.log.info(`From ${InstallationVersion} → ${target}`)
     const spinner = prompts.spinner()
     spinner.start("Upgrading...")
     const err = await Installation.upgrade(method, target).catch((err) => err)

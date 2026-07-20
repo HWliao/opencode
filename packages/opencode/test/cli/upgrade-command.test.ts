@@ -20,7 +20,7 @@ function quietPromptUi() {
 }
 
 describe("upgrade command", () => {
-  test("local builds skip before detecting or running a managed upgrade", async () => {
+  test("local builds resolve latest before refusing a managed upgrade", async () => {
     quietPromptUi()
     const isLocal = spyOn(Installation, "isLocal").mockReturnValue(true)
     const method = spyOn(Installation, "method").mockResolvedValue("npm")
@@ -30,8 +30,8 @@ describe("upgrade command", () => {
     await UpgradeCommand.handler({})
 
     expect(isLocal).toHaveBeenCalled()
-    expect(method).not.toHaveBeenCalled()
-    expect(latest).not.toHaveBeenCalled()
+    expect(method).toHaveBeenCalled()
+    expect(latest).toHaveBeenCalled()
     expect(upgrade).not.toHaveBeenCalled()
     expect(prompts.log.warn).toHaveBeenCalledWith(InstallationLocalUpgradeMessage)
   })

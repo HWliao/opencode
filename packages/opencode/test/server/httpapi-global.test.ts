@@ -20,7 +20,14 @@ import { testEffect } from "../lib/effect"
 
 afterEach(() => {
   mock.restore()
+  installationMethodCalls = 0
+  installationLatestCalls = 0
+  installationUpgradeCalls = 0
 })
+
+let installationMethodCalls = 0
+let installationLatestCalls = 0
+let installationUpgradeCalls = 0
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
@@ -38,9 +45,20 @@ const apiLayer = HttpRouter.serve(
   Layer.provide(Layer.mock(MoveSession.Service)({})),
   Layer.provide(
     Layer.mock(Installation.Service)({
-      method: () => Effect.succeed("npm"),
-      latest: () => Effect.succeed("9.9.9"),
-      upgrade: () => Effect.void,
+      method: () =>
+        Effect.sync(() => {
+          installationMethodCalls++
+          return "npm" as Installation.Method
+        }),
+      latest: () =>
+        Effect.sync(() => {
+          installationLatestCalls++
+          return "9.9.9"
+        }),
+      upgrade: () =>
+        Effect.sync(() => {
+          installationUpgradeCalls++
+        }),
     }),
   ),
   Layer.provide(ServerAuth.Config.configLayer({ password: Option.none(), username: "opencode" })),
@@ -56,10 +74,13 @@ describe("global HttpApi", () => {
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ success: true, version: "9.9.9" })
+      expect(installationMethodCalls).toBe(1)
+      expect(installationLatestCalls).toBe(1)
+      expect(installationUpgradeCalls).toBe(1)
     }),
   )
 
-  it.live("refuses managed upgrades for local builds", () =>
+  it.live("resolves latest before refusing managed upgrades for local builds", () =>
     Effect.gen(function* () {
       spyOn(Installation, "isLocal").mockReturnValue(true)
 
@@ -67,6 +88,9 @@ describe("global HttpApi", () => {
 
       expect(response.status).toBe(400)
       expect(yield* response.json).toEqual({ success: false, error: InstallationLocalUpgradeMessage })
+      expect(installationMethodCalls).toBe(1)
+      expect(installationLatestCalls).toBe(1)
+      expect(installationUpgradeCalls).toBe(0)
     }),
   )
 
