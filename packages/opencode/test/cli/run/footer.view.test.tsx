@@ -16,6 +16,7 @@ import {
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "@/cli/cmd/run/footer.command"
+import { RunFooterSubagentBody } from "@/cli/cmd/run/footer.subagent"
 import { RunFooterView } from "@/cli/cmd/run/footer.view"
 import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
 import { RUN_THEME_FALLBACK, type RunTheme } from "@/cli/cmd/run/theme"
@@ -673,6 +674,43 @@ test("direct subagent panel closes when moving up from the first item", async ()
 
     app.mockInput.pressKey("ARROW_UP")
     expect(closed).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct subagent inspector shows model variant in header", async () => {
+  const [tab] = createSignal<FooterSubagentTab | undefined>({
+    ...subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" }),
+    model: { providerID: "opencode", modelID: "gpt-5", variant: "high" },
+  })
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={14}>
+        <RunFooterSubagentBody
+          active={() => true}
+          theme={() => RUN_THEME_FALLBACK}
+          tab={tab}
+          index={() => 1}
+          total={() => 1}
+          detail={() => ({ sessionID: "s-1", commits: [] })}
+          width={() => 100}
+          onCycle={() => {}}
+          onClose={() => {}}
+        />
+      </box>
+    ),
+    { width: 100, height: 14 },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("Inspect auth flow")
+    expect(frame).toContain("gpt-5")
+    expect(frame).toContain("high")
   } finally {
     app.renderer.destroy()
   }

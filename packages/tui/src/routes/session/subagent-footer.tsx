@@ -53,6 +53,18 @@ export function SubagentFooter() {
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
+  const modelStatus = createMemo(() => {
+    const last = messages().findLast((item): item is AssistantMessage => item.role === "assistant")
+    const model =
+      session()?.model ?? (last ? { id: last.modelID, providerID: last.providerID, variant: last.variant } : undefined)
+    if (!model) return
+
+    const info = sync.data.provider.find((item) => item.id === model.providerID)?.models[model.id]
+    return {
+      model: info?.name ?? model.id,
+      variant: model.variant && model.variant !== "default" ? model.variant : undefined,
+    }
+  })
 
   const { theme } = useTheme()
   const keymap = useOpencodeKeymap()
@@ -84,6 +96,16 @@ export function SubagentFooter() {
               <text style={{ fg: theme.textMuted }}>
                 ({subagentInfo().index} of {subagentInfo().total})
               </text>
+            </Show>
+            <Show when={modelStatus()}>
+              {(item) => (
+                <text fg={theme.textMuted} wrapMode="none">
+                  {item().model}
+                  <Show when={item().variant}>
+                    {(variant) => <span style={{ fg: theme.warning, bold: true }}> {variant()}</span>}
+                  </Show>
+                </text>
+              )}
             </Show>
             <Show when={usage()}>
               {(item) => (

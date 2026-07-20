@@ -83,6 +83,17 @@ export function RunFooterSubagentBody(props: {
 
     return current.label
   })
+  const model = createMemo(() => {
+    const current = tab()?.model
+    if (!current) {
+      return
+    }
+
+    return {
+      modelID: current.modelID,
+      variant: current.variant && current.variant !== "default" ? current.variant : undefined,
+    }
+  })
   const rows = indexArray(commits, (commit, index) => (
     <box flexDirection="column" gap={0} flexShrink={0}>
       {index > 0 && separatorRows(commits()[index - 1], commit()) > 0 ? <box height={1} flexShrink={0} /> : null}
@@ -141,6 +152,22 @@ export function RunFooterSubagentBody(props: {
                   <span style={{ fg: footer().muted }}>{"  " + subtitle()}</span>
                 </Show>
               </text>
+              <Show when={model()}>
+                {(info) => (
+                  <box flexDirection="row" gap={0} flexShrink={1}>
+                    <text fg={footer().muted} wrapMode="none" truncate flexShrink={1}>
+                      {info().modelID}
+                    </text>
+                    <Show when={info().variant}>
+                      {(variant) => (
+                        <text fg={footer().warning} wrapMode="none" flexShrink={0}>
+                          {" " + variant()}
+                        </text>
+                      )}
+                    </Show>
+                  </box>
+                )}
+              </Show>
               <Show when={props.total() > 1 && props.index() > 0}>
                 <text fg={footer().muted} wrapMode="none" truncate flexShrink={0}>
                   {props.index()} of {props.total()}
