@@ -420,6 +420,7 @@ function sdk(
     subscribe?: OpencodeClient["event"]["subscribe"]
     globalEvent?: OpencodeClient["global"]["event"]
     promptAsync?: OpencodeClient["session"]["promptAsync"]
+    shell?: OpencodeClient["session"]["shell"]
     status?: OpencodeClient["session"]["status"]
     messages?: OpencodeClient["session"]["messages"]
     children?: OpencodeClient["session"]["children"]
@@ -433,6 +434,8 @@ function sdk(
   const globalEvent: OpencodeClient["global"]["event"] =
     input.globalEvent ?? (() => globalSse(input.globalStream ?? wrapGlobalStream(input.stream ?? emptyStream())))
   const promptAsync: OpencodeClient["session"]["promptAsync"] = input.promptAsync ?? (() => ok(undefined))
+  const shell: OpencodeClient["session"]["shell"] =
+    input.shell ?? ((input) => ok(assistantMessage({ sessionID: input.sessionID, id: "msg-shell", parts: [] })))
   const status: OpencodeClient["session"]["status"] = input.status ?? (() => ok({}))
   const messages: OpencodeClient["session"]["messages"] = input.messages ?? (() => ok([]))
   const children: OpencodeClient["session"]["children"] = input.children ?? (() => ok([]))
@@ -442,6 +445,7 @@ function sdk(
   spyOn(client.event, "subscribe").mockImplementation(subscribe)
   spyOn(client.global, "event").mockImplementation(globalEvent)
   spyOn(client.session, "promptAsync").mockImplementation(promptAsync)
+  spyOn(client.session, "shell").mockImplementation(shell)
   spyOn(client.session, "status").mockImplementation(status)
   spyOn(client.session, "messages").mockImplementation(messages)
   spyOn(client.session, "children").mockImplementation(children)
@@ -2059,6 +2063,66 @@ describe("run stream transport", () => {
         }),
         expect.objectContaining({
           parts: [{ type: "text", text: "again" }],
+        }),
+      ])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("forwards variant when sending shell mode prompts", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const seen: Parameters<OpencodeClient["session"]["shell"]>[0][] = []
+
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        shell: async (input) => {
+          seen.push(input)
+          return ok(assistantMessage({ sessionID: input.sessionID, id: "msg-shell", parts: [] }))
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      await transport.runPromptTurn({
+        agent: "build",
+        model: { providerID: "test", modelID: "test-model" },
+        variant: "high",
+        prompt: { text: "echo variant", mode: "shell", parts: [] },
+        files: [],
+        includeFiles: false,
+      })
+
+      await transport.runPromptTurn({
+        agent: "build",
+        model: { providerID: "test", modelID: "test-model" },
+        variant: undefined,
+        prompt: { text: "echo default", mode: "shell", parts: [] },
+        files: [],
+        includeFiles: false,
+      })
+
+      expect(seen).toEqual([
+        expect.objectContaining({
+          sessionID: "session-1",
+          agent: "build",
+          model: { providerID: "test", modelID: "test-model" },
+          variant: "high",
+          command: "echo variant",
+        }),
+        expect.objectContaining({
+          sessionID: "session-1",
+          agent: "build",
+          model: { providerID: "test", modelID: "test-model" },
+          variant: "default",
+          command: "echo default",
         }),
       ])
     } finally {

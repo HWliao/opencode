@@ -1064,6 +1064,7 @@ export function Prompt(props: PromptProps) {
           providerID: selectedModel.providerID,
           modelID: selectedModel.modelID,
         },
+        variant: variant ?? "default",
         command: inputText,
       })
       setStore("mode", "normal")

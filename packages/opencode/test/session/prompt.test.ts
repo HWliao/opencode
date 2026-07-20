@@ -1493,6 +1493,307 @@ it.instance("shell rejects with BusyError when loop running", () =>
   }),
 )
 
+const shellVariantCommand = `bun -e "process.stdout.write('variant')"`
+
+unixNoLLMServer(
+  "shell persists explicit model variant",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, sessions, chat } = yield* boot()
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        variant: "high",
+        command: "printf variant",
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const shellUser = messages.findLast((msg) => msg.info.role === "user")
+      expect(shellUser?.info.role).toBe("user")
+      if (shellUser?.info.role === "user") {
+        expect(shellUser.info.model.variant).toBe("high")
+      }
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.info.variant).toBe("high")
+      }
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: {}, xhigh: {} },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+noLLMServer.instance(
+  "shell persists explicit model variant across platforms",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, sessions, chat } = yield* boot()
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        variant: "high",
+        command: shellVariantCommand,
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const shellUser = messages.findLast((msg) => msg.info.role === "user")
+      expect(shellUser?.info.role).toBe("user")
+      if (shellUser?.info.role === "user") {
+        expect(shellUser.info.model.variant).toBe("high")
+      }
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.info.variant).toBe("high")
+      }
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: {}, xhigh: {} },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+unixNoLLMServer(
+  "shell inherits current session variant when input omits variant",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        model: {
+          providerID: ProviderV2.ID.make("test"),
+          id: ModelV2.ID.make("test-model"),
+          variant: "xhigh",
+        },
+      })
+
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+        command: "printf inherited",
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const shellUser = messages.findLast((msg) => msg.info.role === "user")
+      expect(shellUser?.info.role).toBe("user")
+      if (shellUser?.info.role === "user") {
+        expect(shellUser.info.model.variant).toBe("xhigh")
+      }
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.info.variant).toBe("xhigh")
+      }
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: {}, xhigh: {} },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+noLLMServer.instance(
+  "shell inherits current session variant across platforms when input omits variant",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        model: {
+          providerID: ProviderV2.ID.make("test"),
+          id: ModelV2.ID.make("test-model"),
+          variant: "xhigh",
+        },
+      })
+
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+        command: shellVariantCommand,
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const shellUser = messages.findLast((msg) => msg.info.role === "user")
+      expect(shellUser?.info.role).toBe("user")
+      if (shellUser?.info.role === "user") {
+        expect(shellUser.info.model.variant).toBe("xhigh")
+      }
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.info.variant).toBe("xhigh")
+      }
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: {}, xhigh: {} },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+noLLMServer.instance(
+  "shell inherits agent configured variant across platforms when input omits variant",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: shellVariantCommand,
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const shellUser = messages.findLast((msg) => msg.info.role === "user")
+      expect(shellUser?.info.role).toBe("user")
+      if (shellUser?.info.role === "user") {
+        expect(shellUser.info.model.variant).toBe("xhigh")
+      }
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.info.variant).toBe("xhigh")
+      }
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: {}, xhigh: {} },
+            },
+          },
+        },
+      },
+      agent: {
+        build: {
+          model: "test/test-model",
+          variant: "xhigh",
+        },
+      },
+    },
+  },
+)
+
+noLLMServer.instance(
+  "shell keeps explicit default and invalid variants from falling back across platforms",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const assertVariantCleared = (variant: string) =>
+        Effect.gen(function* () {
+          const chat = yield* sessions.create({
+            model: {
+              providerID: ProviderV2.ID.make("test"),
+              id: ModelV2.ID.make("test-model"),
+              variant: "xhigh",
+            },
+          })
+          const result = yield* prompt.shell({
+            sessionID: chat.id,
+            agent: "build",
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+            variant,
+            command: shellVariantCommand,
+          })
+
+          const messages = yield* sessions.messages({ sessionID: chat.id })
+          const shellUser = messages.findLast((msg) => msg.info.role === "user")
+          expect(shellUser?.info.role).toBe("user")
+          if (shellUser?.info.role === "user") {
+            expect(shellUser.info.model.variant).toBeUndefined()
+          }
+
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role === "assistant") {
+            expect(result.info.variant).toBeUndefined()
+          }
+        })
+
+      yield* assertVariantCleared("default")
+      yield* assertVariantCleared("missing")
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: {}, xhigh: {} },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
 unixNoLLMServer(
   "shell captures stdout and stderr in completed tool output",
   () =>

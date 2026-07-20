@@ -20,7 +20,16 @@ const optimistic: Array<{
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
-const sentShell: string[] = []
+const sentShell: Array<{
+  directory: string
+  input: {
+    sessionID: string
+    agent: string
+    model: { providerID: string; modelID: string }
+    variant?: string
+    command: string
+  }
+}> = []
 const syncedDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
 
@@ -74,8 +83,14 @@ const clientFor = (directory: string) => {
           },
         }
       },
-      shell: async () => {
-        sentShell.push(directory)
+      shell: async (input: {
+        sessionID: string
+        agent: string
+        model: { providerID: string; modelID: string }
+        variant?: string
+        command: string
+      }) => {
+        sentShell.push({ directory, input })
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
@@ -297,7 +312,7 @@ describe("prompt submit worktree selection", () => {
 
     expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+    expect(sentShell.map((item) => item.directory)).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
     expect(promoted).toEqual([
       { directory: "/repo/worktree-a", sessionID: "session-1" },
@@ -459,6 +474,78 @@ describe("prompt submit worktree selection", () => {
       message: {
         model: { providerID: "draft-provider", modelID: "draft-model", variant: "draft-variant" },
       },
+    })
+  })
+
+  test("includes the selected variant on shell submissions", async () => {
+    params = { id: "session-1" }
+    variant = "high"
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(sentShell).toHaveLength(1)
+    expect(sentShell[0]?.input).toMatchObject({
+      sessionID: "session-1",
+      agent: "agent",
+      model: { providerID: "provider", modelID: "model" },
+      variant: "high",
+      command: "ls",
+    })
+  })
+
+  test("sends explicit default variant on shell submissions when no variant is selected", async () => {
+    params = { id: "session-1" }
+    variant = undefined
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(sentShell).toHaveLength(1)
+    expect(sentShell[0]?.input).toMatchObject({
+      sessionID: "session-1",
+      agent: "agent",
+      model: { providerID: "provider", modelID: "model" },
+      variant: "default",
+      command: "ls",
     })
   })
 

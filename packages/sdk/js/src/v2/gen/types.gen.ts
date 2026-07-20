@@ -10243,6 +10243,7 @@ export type SessionShellData = {
       providerID: string
       modelID: string
     }
+    variant?: string
     command: string
   }
   path: {

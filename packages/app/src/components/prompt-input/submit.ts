@@ -455,6 +455,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sessionID: session.id,
           agent,
           model,
+          variant: variant ?? "default",
           command: text,
         })
         .catch((err) => {

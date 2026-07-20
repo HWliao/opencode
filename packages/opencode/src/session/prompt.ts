@@ -467,13 +467,28 @@ const layer = Layer.effect(
               throw error
             }
             const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
+            const current = yield* currentModel(input.sessionID)
+            const sameCurrent = current.providerID === model.providerID && current.modelID === model.modelID
+            const currentVariant =
+              "variant" in current && typeof current.variant === "string" ? current.variant : undefined
+            const full = yield* provider
+              .getModel(model.providerID, model.modelID)
+              .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
+            const agentVariant =
+              agent.model?.providerID === model.providerID && agent.model.modelID === model.modelID ? agent.variant : undefined
+            const variant = (input.variant === undefined
+              ? [sameCurrent ? currentVariant : undefined, agentVariant]
+              : [input.variant]
+            ).find(
+              (value): value is string => Boolean(value && value !== "default" && full?.variants?.[value]),
+            )
             const userMsg: SessionV1.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
               time: { created: Date.now() },
               role: "user",
               agent: input.agent,
-              model: { providerID: model.providerID, modelID: model.modelID },
+              model: { providerID: model.providerID, modelID: model.modelID, variant },
             }
             yield* sessions.updateMessage(userMsg)
             const userPart: SessionV1.Part = {
@@ -499,6 +514,7 @@ const layer = Layer.effect(
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
               modelID: model.modelID,
               providerID: model.providerID,
+              variant,
             }
             yield* sessions.updateMessage(msg)
             const started = Date.now()
@@ -1529,6 +1545,7 @@ export const ShellInput = Schema.Struct({
   messageID: Schema.optional(MessageID),
   agent: Schema.String,
   model: Schema.optional(ModelRef),
+  variant: Schema.optional(Schema.String),
   command: Schema.String,
 })
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>

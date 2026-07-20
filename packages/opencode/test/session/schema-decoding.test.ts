@@ -267,11 +267,13 @@ describe("SessionPrompt input schemas", () => {
     expect(decode({ sessionID })).toEqual({ sessionID })
   })
 
-  test("ShellInput requires agent + command", () => {
+  test("ShellInput accepts optional variant", () => {
     const decode = decodeUnknown(SessionPrompt.ShellInput)
-    const expected = { sessionID, agent: "build", command: "echo hi" }
-    const input: unknown = expected
-    expect(decode(input)).toEqual(expected)
+    const base = { sessionID, agent: "build", command: "echo hi" }
+    const withVariant = { ...base, variant: "high" }
+
+    expect(decode(base)).toEqual(base)
+    expect(decode(withVariant)).toEqual(withVariant)
     expect(() => decode({ sessionID })).toThrow()
   })
 

@@ -1,5 +1,7 @@
 # Local Versions Should Skip Auto Update
 
+**Status:** Resolved
+
 ## Summary
 
 When the running version ends with `.local`, it represents a locally built or locally modified installation. Even if automatic updates are enabled, opencode should not perform a managed auto-update.
